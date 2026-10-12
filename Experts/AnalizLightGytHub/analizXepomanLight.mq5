@@ -13,24 +13,19 @@
 //=== ПОДКЛЮЧЕНИЕ СЛОЯ 3: ЯДРО АНАЛИЗА ===
 #include <Analyzer.mqh>
 
+//=== ПОДКЛЮЧЕНИЕ СЛОЯ 4: МЕНЕДЖЕР СИГНАЛОВ ===
+#include <SignalManager.mqh>
 
 // Глобальные параметры (можно оптимизировать)
 IndicatorParams optParams;
 
 
 
-//--- История последних 5 сигналов
 
-SignalRecord history[HISTORY_SIZE];
+
 string historyFileName = "signal_history.dat";
 
-//--- Контроль новых свечей для статичных сигналов
-datetime lastBarTimeH1 = 0;
-datetime lastBarTimeH4 = 0;
-datetime lastBarTimeD1 = 0;
-bool signalFixedH1 = false;  // Сигнал H1 зафиксирован
-bool signalFixedH4 = false;  // Сигнал H4 зафиксирован
-bool signalFixedD1 = false;  // Сигнал D1 зафиксирован
+
 
 //--- Бэктест на истории
 bool isBacktestRunning = false;
@@ -130,47 +125,6 @@ input group "══════ НАСТРОЙКИ БЭКТЕСТА ════
 input int    backtestBars      = 1000;  // Количество баров для теста
 input bool   OptimizeParams    = true;  // Запускать авто-оптимизацию
 
-
-
-//--- Состояние для каждого режима
-string lastSignalH1 = "", lastSignalH4 = "", lastSignalD1 = "";
-datetime lastSignalTimeH1 = 0, lastSignalTimeH4 = 0, lastSignalTimeD1 = 0;
-
-// Уровни для каждого режима (отдельно)
-double recEntryH1 = 0, recSLH1 = 0, recTPH1 = 0;
-double recEntryH4 = 0, recSLH4 = 0, recTPH4 = 0;
-double recEntryD1 = 0, recSLD1 = 0, recTPD1 = 0;
-string recOrderTypeH1 = "", recOrderTypeH4 = "", recOrderTypeD1 = "";
-
-// Активный режим для отображения уровней (последний сработавший)
-string activeMode = "";  // "H1", "H4" или "D1"
-double recEntry = 0, recSL = 0, recTP = 0;
-string recOrderType = "";
-//--- Статусы фильтров
-bool filterNews = false, filterVolatility = false, filterSession = false;
-bool filterCandle = false, filterRSI = false, filterStructure = false;
-
-//--- Структурные уровни
-double nearestResistance = 0, nearestSupport = 0;
-
-//--- Статистика
-int totalSignals = 0, winningSignals = 0, losingSignals = 0;
-double lastEntryPrice = 0;
-string lastDirection = "";
-datetime lastSignalCheckTime = 0;
-bool signalChecked = false;
-
-//--- Срок жизни сигнала и статус исполнения
-datetime signalExpirationTime = 0;     // Когда сигнал истекает
-bool signalWasExecuted = false;        // Был ли сигнал реально исполнен
-int canceledSignals = 0;               // Счётчик аннулированных сигналов
-//--- Сила последнего сигнала (для сравнения)
-double lastSignalStrengthH1 = 0;
-double lastSignalStrengthH4 = 0;
-double lastSignalStrengthD1 = 0;
-
-
-
 //--- Статистика (сохранение в файл)
 string statsFileName = "";  // Инициализируется в OnInit()
 datetime statsStartDate = 0;
@@ -184,6 +138,9 @@ datetime logMonthStart = 0;
 int OnInit()
 {
    currentSymbol = _Symbol;
+   
+    //=== ИНИЦИАЛИЗАЦИЯ МЕНЕДЖЕРА СИГНАЛОВ ===
+   SignalManager_Init();
    
       //=== ИНИЦИАЛИЗАЦИЯ ПАРАМЕТРОВ ИЗ INPUT НАСТРОЕК ===
    optParams.emaFastPeriod = InpEmaFastPeriod;
