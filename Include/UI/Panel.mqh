@@ -8,6 +8,10 @@
 #include <Config.mqh>
 #include <DataStructures.mqh>
 
+// Переменные (history, totalSignals, recEntry и т.д.) уже объявлены 
+// в SignalManager.mqh или в главном файле ДО этого include.
+// Поэтому extern здесь не нужен и вызывает конфликт!
+
 //--- Состояние UI
 int currentTab = 0;
 bool isCollapsed = false;
@@ -19,10 +23,11 @@ IndicatorVotes g_resultD1;
 string g_currentSymbol;
 double g_symbolPoint;
 
+
 //+------------------------------------------------------------------+
 //| Создание текстовой метки (ОБЩАЯ для всех вкладок)                |
 //+------------------------------------------------------------------+
-void UI_CreateLabel(const string name, int x, int y, const string text, color clr, int fontSize, bool bold)
+void UI_CreateLabel(const string name, int x, int y, const string text, color clr, int fontSize, bool bold = false)
 {
    if(ObjectFind(0, name) < 0)
    {
@@ -42,7 +47,7 @@ void UI_CreateLabel(const string name, int x, int y, const string text, color cl
 #include <UI/TabAnalysis.mqh>
 
 //+------------------------------------------------------------------+
-//| Диспетчер отрисовки вкладок (ИСПРАВЛЕНО: все вкладки активны)    |
+//| Диспетчер отрисовки вкладок                                      |
 //+------------------------------------------------------------------+
 void UI_DrawCurrentTab()
 {
@@ -50,7 +55,8 @@ void UI_DrawCurrentTab()
    
    int y = PANEL_Y + 70;
    int lineHeight = PANEL_LINE_HEIGHT;
-   string priceFormat = "%." + IntegerToString((int)SymbolInfoInteger(g_currentSymbol, SYMBOL_DIGITS)) + "f";
+   int digits = (symbolDigits > 0) ? symbolDigits : (int)SymbolInfoInteger(g_currentSymbol, SYMBOL_DIGITS);
+   string priceFormat = "%." + IntegerToString(digits) + "f";
    
    string pageInfo = StringFormat("📑 Стр. %d/%d: %s", currentTab + 1, TAB_COUNT, TAB_NAMES[currentTab]);
    UI_CreateLabel(PANEL_NAME + "_PageInfo", pageInfo, PANEL_X + 10, y, clrWheat, 9);
@@ -72,7 +78,7 @@ void UI_DrawTabFilters(int y, int lineHeight)
 {
    string modesStr = "🎛️ Режимы: " + (UseSignalH1?"🟢H1 ":"⚫H1 ") + (UseSignalH4?"🟡H4 ":"⚫H4 ") + (UseSignalD1?"🔴D1 ":"⚫D1 ");
    UI_CreateLabel(PANEL_NAME+"_C1_Modes", modesStr, PANEL_X+10, y, clrWheat, 9); y += lineHeight+3;
-   UI_CreateLabel(PANEL_NAME+"_C1_Title", "🛡️ ФИЛЬТРЫ ТОЧНОСТИ:", PANEL_X+10, y, clrYellow, 11); y += lineHeight+3;
+   UI_CreateLabel(PANEL_NAME+"_C1_Title", "🛡️ ФИЛЬТРЫ ТОЧНОСТИ:", PANEL_X+10, y, clrYellow, 11, true); y += lineHeight+3;
    
    UI_CreateLabel(PANEL_NAME+"_C1_F1", (filterNews?"✅ ":"❌ ")+"📰 Новости (±30 мин)", PANEL_X+25, y, filterNews?clrLime:clrRed, 10); y += lineHeight;
    UI_CreateLabel(PANEL_NAME+"_C1_F2", (filterVolatility?"✅ ":"❌ ")+"📊 Волатильность (ATR)", PANEL_X+25, y, filterVolatility?clrLime:clrRed, 10); y += lineHeight;
@@ -84,9 +90,10 @@ void UI_DrawTabFilters(int y, int lineHeight)
    UI_CreateLabel(PANEL_NAME+"_C1_Sep", "═══════════════════════════════════════════════════════", PANEL_X+10, y, clrDodgerBlue, 9); y += lineHeight;
    
    bool allFilters = filterNews && filterVolatility && filterSession && filterCandle && filterRSI && filterStructure;
-   string confirmStatus = allFilters ? ((g_resultH1.weightedSum>0)?"🟢 CONFIRMED BUY 🔔":"🔴 CONFIRMED SELL 🔔") : StringFormat("⏳ Фильтры: %d/6 пройдено", (filterNews+filterVolatility+filterSession+filterCandle+filterRSI+filterStructure));
+   int passedCount = (filterNews?1:0) + (filterVolatility?1:0) + (filterSession?1:0) + (filterCandle?1:0) + (filterRSI?1:0) + (filterStructure?1:0);
+   string confirmStatus = allFilters ? ((g_resultH1.weightedSum>0)?"🟢 CONFIRMED BUY 🔔":"🔴 CONFIRMED SELL 🔔") : StringFormat("⏳ Фильтры: %d/6 пройдено", passedCount);
    color confirmColor = allFilters ? ((g_resultH1.weightedSum>0)?clrLime:clrRed) : clrOrange;
-   UI_CreateLabel(PANEL_NAME+"_C1_Confirm", confirmStatus, PANEL_X+20, y, confirmColor, 11);
+   UI_CreateLabel(PANEL_NAME+"_C1_Confirm", confirmStatus, PANEL_X+20, y, confirmColor, 11, true);
 }
 
 //+------------------------------------------------------------------+
@@ -94,27 +101,27 @@ void UI_DrawTabFilters(int y, int lineHeight)
 //+------------------------------------------------------------------+
 void UI_DrawTabLevels(int y, int lineHeight, string priceFormat)
 {
-   UI_CreateLabel(PANEL_NAME+"_C2_Title", "📊 РЕКОМЕНДУЕМЫЕ УРОВНИ:", PANEL_X+10, y, clrYellow, 11); y += lineHeight+5;
+   UI_CreateLabel(PANEL_NAME+"_C2_Title", "📊 РЕКОМЕНДУЕМЫЕ УРОВНИ:", PANEL_X+10, y, clrYellow, 11, true); y += lineHeight+5;
    
    if(recEntry > 0)
    {
       color activeColor = (activeMode=="H1")?clrLime:((activeMode=="H4")?clrYellow:clrOrangeRed);
       string activePrefix = (activeMode=="H1")?"🟢":((activeMode=="H4")?"🟡":"🔴");
-      UI_CreateLabel(PANEL_NAME+"_C2_Entry", StringFormat("%s ВХОД (%s): %s", activePrefix, recOrderType, DoubleToString(recEntry, symbolDigits)), PANEL_X+20, y, activeColor, 10); y += lineHeight;
+      UI_CreateLabel(PANEL_NAME+"_C2_Entry", StringFormat("%s ВХОД (%s): %s", activePrefix, recOrderType, DoubleToString(recEntry, symbolDigits)), PANEL_X+20, y, activeColor, 10, true); y += lineHeight;
       
       double slDist = MathAbs(recEntry - recSL);
       string slPips = (g_resultH1.atrValue>0) ? StringFormat(" (-%.1f ATR)", slDist/g_resultH1.atrValue) : "";
-      UI_CreateLabel(PANEL_NAME+"_C2_SL", StringFormat("🛑 STOP LOSS: %s", DoubleToString(recSL, symbolDigits))+slPips, PANEL_X+20, y, SLColor, 10); y += lineHeight;
+      UI_CreateLabel(PANEL_NAME+"_C2_SL", StringFormat("🛑 STOP LOSS: %s", DoubleToString(recSL, symbolDigits))+slPips, PANEL_X+20, y, SLColor, 10, true); y += lineHeight;
       
       double tpDist = MathAbs(recTP - recEntry);
       string rr = (slDist>0) ? StringFormat(" (R:R 1:%.1f)", tpDist/slDist) : "";
-      UI_CreateLabel(PANEL_NAME+"_C2_TP", StringFormat("🎯 TAKE PROFIT: %s", DoubleToString(recTP, symbolDigits))+rr, PANEL_X+20, y, TPColor, 10); y += lineHeight+5;
+      UI_CreateLabel(PANEL_NAME+"_C2_TP", StringFormat("🎯 TAKE PROFIT: %s", DoubleToString(recTP, symbolDigits))+rr, PANEL_X+20, y, TPColor, 10, true); y += lineHeight+5;
       
       double rrRatio = (slDist>0) ? tpDist/slDist : 0;
       color rrColor = (rrRatio>=2.0)?clrLime:((rrRatio>=1.5)?clrYellow:((rrRatio>=1.0)?clrOrange:clrRed));
-      UI_CreateLabel(PANEL_NAME+"_C2_RR", StringFormat("💰 Risk/Reward = 1:%.2f %s", rrRatio, rrRatio>=2.0?"✅ ОТЛИЧНО":(rrRatio>=1.5?"✅ ХОРОШО":(rrRatio>=1.0?"⚠️ НОРМ":"❌ ПЛОХО"))), PANEL_X+20, y, rrColor, 10); y += lineHeight+5;
+      UI_CreateLabel(PANEL_NAME+"_C2_RR", StringFormat("💰 Risk/Reward = 1:%.2f %s", rrRatio, rrRatio>=2.0?"✅ ОТЛИЧНО":(rrRatio>=1.5?"✅ ХОРОШО":(rrRatio>=1.0?"⚠️ НОРМ":"❌ ПЛОХО"))), PANEL_X+20, y, rrColor, 10, true); y += lineHeight+5;
       
-      UI_CreateLabel(PANEL_NAME+"_C2_Struct", "🧱 Структурные уровни (H4):", PANEL_X+10, y, clrYellow, 10); y += lineHeight;
+      UI_CreateLabel(PANEL_NAME+"_C2_Struct", "🧱 Структурные уровни (H4):", PANEL_X+10, y, clrYellow, 10, true); y += lineHeight;
       UI_CreateLabel(PANEL_NAME+"_C2_Res", (nearestResistance>0)?StringFormat("🔸 Сопротивление: %s", DoubleToString(nearestResistance, symbolDigits)):"🔸 Сопротивление: не найдено", PANEL_X+20, y, (nearestResistance>0)?clrOrange:clrGray, 9); y += lineHeight;
       UI_CreateLabel(PANEL_NAME+"_C2_Sup", (nearestSupport>0)?StringFormat("🔹 Поддержка: %s", DoubleToString(nearestSupport, symbolDigits)):"🔹 Поддержка: не найдена", PANEL_X+20, y, (nearestSupport>0)?clrDeepSkyBlue:clrGray, 9);
    }
@@ -130,7 +137,7 @@ void UI_DrawTabLevels(int y, int lineHeight, string priceFormat)
 //+------------------------------------------------------------------+
 void UI_DrawTabStats(int y, int lineHeight)
 {
-   UI_CreateLabel(PANEL_NAME+"_C3_Title", "📈 СТАТИСТИКА ТОЧНОСТИ:", PANEL_X+10, y, clrYellow, 11); y += lineHeight+5;
+   UI_CreateLabel(PANEL_NAME+"_C3_Title", "📈 СТАТИСТИКА ТОЧНОСТИ:", PANEL_X+10, y, clrYellow, 11, true); y += lineHeight+5;
    UI_CreateLabel(PANEL_NAME+"_C3_Date", "📅 Сбор начат: " + TimeToString(statsStartDate, TIME_DATE), PANEL_X+20, y, clrGray, 9); y += lineHeight;
    UI_CreateLabel(PANEL_NAME+"_C3_S1", StringFormat("📊 Всего сигналов: %d", totalSignals), PANEL_X+20, y, clrLightGray, 10); y += lineHeight;
    UI_CreateLabel(PANEL_NAME+"_C3_S2", StringFormat("✅ Верных: %d", winningSignals), PANEL_X+20, y, clrLime, 10); y += lineHeight;
@@ -139,13 +146,14 @@ void UI_DrawTabStats(int y, int lineHeight)
    
    UI_CreateLabel(PANEL_NAME+"_C3_Sep", "═══════════════════════════════════════════════════════", PANEL_X+10, y, clrDodgerBlue, 9); y += lineHeight+3;
    
-   double accuracy = (totalSignals==0) ? 0 : (winningSignals * 100.0 / (winningSignals + losingSignals));
+   int decided = winningSignals + losingSignals;
+   double accuracy = (decided==0) ? 0 : (winningSignals * 100.0 / decided);
    color accColor = (accuracy>=70)?clrLime:((accuracy>=55)?clrOrange:(totalSignals>0?clrRed:clrGray));
-   UI_CreateLabel(PANEL_NAME+"_C3_Acc", StringFormat("🎯 ТОЧНОСТЬ: %.1f%%", accuracy), PANEL_X+20, y, accColor, 14); y += lineHeight+5;
+   UI_CreateLabel(PANEL_NAME+"_C3_Acc", StringFormat("🎯 ТОЧНОСТЬ: %.1f%%", accuracy), PANEL_X+20, y, accColor, 14, true); y += lineHeight+5;
    
    string gradeStr = (totalSignals==0)?"⏳ Нет данных":((accuracy>=ACCURACY_EXCELLENT)?"🏆 ОТЛИЧНО":((accuracy>=ACCURACY_GOOD)?"✅ ХОРОШО":((accuracy>=ACCURACY_NORMAL)?"⚠️ НОРМАЛЬНО":"❗ ТРЕБУЕТ НАСТРОЙКИ")));
    color gradeColor = (totalSignals==0)?clrGray:((accuracy>=ACCURACY_EXCELLENT)?clrLime:((accuracy>=ACCURACY_GOOD)?clrGreen:((accuracy>=ACCURACY_NORMAL)?clrOrange:clrRed)));
-   UI_CreateLabel(PANEL_NAME+"_C3_Grade", gradeStr, PANEL_X+20, y, gradeColor, 11); y += lineHeight+10;
+   UI_CreateLabel(PANEL_NAME+"_C3_Grade", gradeStr, PANEL_X+20, y, gradeColor, 11, true); y += lineHeight+10;
    
    // Кнопка RESET
    string resetBtn = PANEL_NAME+"_C3_Reset";
@@ -180,24 +188,25 @@ void UI_DrawTabStats(int y, int lineHeight)
 //+------------------------------------------------------------------+
 void UI_DrawTabHistory(int y, int lineHeight, string priceFormat)
 {
-   UI_CreateLabel(PANEL_NAME+"_C4_Title", "📜 ИСТОРИЯ ПОСЛЕДНИХ СИГНАЛОВ:", PANEL_X+10, y, clrYellow, 11); y += lineHeight+3;
-   UI_CreateLabel(PANEL_NAME+"_C4_H1", "ВРЕМЯ", PANEL_X+15, y, clrDodgerBlue, 9);
-   UI_CreateLabel(PANEL_NAME+"_C4_H2", "ТФ", PANEL_X+110, y, clrDodgerBlue, 9);
-   UI_CreateLabel(PANEL_NAME+"_C4_H3", "НАПР", PANEL_X+145, y, clrDodgerBlue, 9);
-   UI_CreateLabel(PANEL_NAME+"_C4_H4", "ВХОД", PANEL_X+190, y, clrDodgerBlue, 9);
-   UI_CreateLabel(PANEL_NAME+"_C4_H5", "СТАТУС", PANEL_X+290, y, clrDodgerBlue, 9);
+   UI_CreateLabel(PANEL_NAME+"_C4_Title", "📜 ИСТОРИЯ ПОСЛЕДНИХ СИГНАЛОВ:", PANEL_X+10, y, clrYellow, 11, true); y += lineHeight+3;
+   UI_CreateLabel(PANEL_NAME+"_C4_H1", "ВРЕМЯ", PANEL_X+15, y, clrDodgerBlue, 9, true);
+   UI_CreateLabel(PANEL_NAME+"_C4_H2", "ТФ", PANEL_X+110, y, clrDodgerBlue, 9, true);
+   UI_CreateLabel(PANEL_NAME+"_C4_H3", "НАПР", PANEL_X+145, y, clrDodgerBlue, 9, true);
+   UI_CreateLabel(PANEL_NAME+"_C4_H4", "ВХОД", PANEL_X+190, y, clrDodgerBlue, 9, true);
+   UI_CreateLabel(PANEL_NAME+"_C4_H5", "СТАТУС", PANEL_X+290, y, clrDodgerBlue, 9, true);
    y += lineHeight;
    UI_CreateLabel(PANEL_NAME+"_C4_Sep", "─────────────────────────────────────────────────────────", PANEL_X+10, y, clrGray, 9); y += lineHeight;
    
    int realCount = 0;
-   for(int i = 0; i < HISTORY_SIZE; i++) if(history[i].time > 0) realCount++;
+   for(int i = 0; i < ArraySize(history); i++) if(history[i].time > 0) realCount++;
    
    if(realCount == 0) {
       UI_CreateLabel(PANEL_NAME+"_C4_Empty", "⏸ История пуста — ждём первый сигнал", PANEL_X+20, y, clrGray, 10);
       return;
    }
    
-   for(int i = HISTORY_SIZE - 1; i >= 0; i--)
+   int histSize = ArraySize(history);
+   for(int i = histSize - 1; i >= 0; i--)
    {
       if(history[i].time == 0) continue;
       string timeStr = TimeToString(history[i].time, TIME_DATE|TIME_MINUTES);
