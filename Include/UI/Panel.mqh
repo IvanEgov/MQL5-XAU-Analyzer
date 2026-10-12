@@ -118,13 +118,33 @@ void UI_DeleteAll()
    ChartRedraw();
 }
 
+//+------------------------------------------------------------------+
+//| Очистка содержимого вкладки                                      |
+//+------------------------------------------------------------------+
 void UI_DeleteTabContent(int idx)
 {
    string pfx = PANEL_NAME + "_C" + (string)idx + "_";
-   int totL = ObjectsTotal(0, 0, OBJ_LABEL);
-   for(int i = totL - 1; i >= 0; i--) { string n = ObjectName(0, i, 0, OBJ_LABEL); if(StringFind(n, pfx) == 0) ObjectDelete(0, n); }
-   int totB = ObjectsTotal(0, 0, OBJ_BUTTON);
-   for(int i = totB - 1; i >= 0; i--) { string n = ObjectName(0, i, 0, OBJ_BUTTON); if(StringFind(n, pfx) == 0) ObjectDelete(0, n); }
+   
+   // Удаляем текстовые метки (OBJ_LABEL)
+   int totalLabels = ObjectsTotal(0, 0, OBJ_LABEL);
+   for(int i = totalLabels - 1; i >= 0; i--) {
+      string name = ObjectName(0, i, 0, OBJ_LABEL);
+      if(StringFind(name, pfx) == 0) ObjectDelete(0, name);
+   }
+   
+   // Удаляем кнопки (OBJ_BUTTON)
+   int totalButtons = ObjectsTotal(0, 0, OBJ_BUTTON);
+   for(int i = totalButtons - 1; i >= 0; i--) {
+      string name = ObjectName(0, i, 0, OBJ_BUTTON);
+      if(StringFind(name, pfx) == 0) ObjectDelete(0, name);
+   }
+   
+   // Удаляем прямоугольники (OBJ_RECTANGLE_LABEL) — прогресс-бар и т.д.
+   int totalRects = ObjectsTotal(0, 0, OBJ_RECTANGLE_LABEL);
+   for(int i = totalRects - 1; i >= 0; i--) {
+      string name = ObjectName(0, i, 0, OBJ_RECTANGLE_LABEL);
+      if(StringFind(name, pfx) == 0) ObjectDelete(0, name);
+   }
 }
 
 // --- Обработка кликов ---
