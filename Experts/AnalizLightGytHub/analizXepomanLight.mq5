@@ -119,23 +119,14 @@ input group "══════ НАСТРОЙКИ БЭКТЕСТА ════
 input int    backtestBars      = 1000;
 input bool   OptimizeParams    = true;
 
-//=== СЕТКА ОПТИМИЗАЦИИ (min / max / step) ===
-input group "══════ СЕТКА ОПТИМИЗАЦИИ (min/max/step) ══════"
-input double OptThresholdMin   = 4.0;    // Порог сигнала: МИН
-input double OptThresholdMax   = 10.0;   // Порог сигнала: МАКС
-input double OptThresholdStep  = 1.0;    // Порог сигнала: ШАГ
+//=== СЕТКА ОПТИМИЗАЦИИ (для Mean Reversion) ===
+input group "══════ СЕТКА ОПТИМИЗАЦИИ ══════"
+// BacktestStepBars уже объявлен выше в настройках
+// Оптимизация будет искать лучшие значения автоматически:
+// - BB Period: 15, 20, 25
+// - RSI Period: 30, 35, 40  
+// - Stoch зоны: 20/80, 25/75, 30/70
 
-input double OptATRMin         = 1.0;    // ATR SL множитель: МИН
-input double OptATRMax         = 3.0;    // ATR SL множитель: МАКС
-input double OptATRStep        = 0.5;    // ATR SL множитель: ШАГ
-
-input int    OptEMAMin         = 20;     // EMA период: МИН
-input int    OptEMAMax         = 60;     // EMA период: МАКС
-input int    OptEMAStep        = 10;     // EMA период: ШАГ
-
-input int    OptRSIMin         = 7;      // RSI период: МИН
-input int    OptRSIMax         = 21;     // RSI период: МАКС
-input int    OptRSIStep        = 2;      // RSI период: ШАГ
 #include <Backtester.mqh>
 
 

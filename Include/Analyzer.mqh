@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| Analyzer.mqh                                                     |
-//| СЛОЙ 3: ЯДРО АНАЛИЗА (профессиональная логика с конфлюэнсом)     |
+//| СЛОЙ 3: ЯДРО АНАЛИЗА (MEAN REVERSION - BB + Stochastic)          |
 //+------------------------------------------------------------------+
 #ifndef ANALYZER_MQH
 #define ANALYZER_MQH
@@ -9,7 +9,8 @@
 #include <DataStructures.mqh>
 
 //+------------------------------------------------------------------+
-//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА ТАЙМФРЕЙМА (ОПТИМИЗИРОВАНА)               |
+//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА (MEAN REVERSION MODE)                     |
+//| Логика: Возврат к средней линии Боллинджера                      |
 //+------------------------------------------------------------------+
 IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
                              int hEMA50, int hEMA200, int hMACD, int hADX, int hRSI,
@@ -19,7 +20,7 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    IndicatorVotes result;
    result.Init();
 
-   //=== 1. ПОЛУЧАЕМ ЦЕНОВЫЕ ДАННЫЕ ===
+   //=== 1. ПОЛУЧАЕМ ДАННЫЕ ===
    double close[], open[], high[], low[];
    ArraySetAsSeries(close, true); ArraySetAsSeries(open, true);
    ArraySetAsSeries(high, true); ArraySetAsSeries(low, true);
@@ -27,157 +28,85 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    if(CopyOpen(_Symbol, tf, shift, 3, open) < 3) return result;
    if(CopyHigh(_Symbol, tf, shift, 3, high) < 3) return result;
    if(CopyLow(_Symbol, tf, shift, 3, low) < 3) return result;
-
-   //=== 2. ПОЛУЧАЕМ ДАННЫЕ ИНДИКАТОРОВ ===
-   double ema50[], ema200[], macdMain[], macdSig[], adx[], plusDI[], minusDI[];
-   double rsi[], stochK[], stochD[], cci[], vol[], obv[], bbMid[], bbUp[], bbLow[], atr[];
    
-   ArraySetAsSeries(ema50, true); ArraySetAsSeries(ema200, true);
-   ArraySetAsSeries(macdMain, true); ArraySetAsSeries(macdSig, true);
-   ArraySetAsSeries(adx, true); ArraySetAsSeries(plusDI, true); ArraySetAsSeries(minusDI, true);
-   ArraySetAsSeries(rsi, true);
-   ArraySetAsSeries(stochK, true); ArraySetAsSeries(stochD, true);
-   ArraySetAsSeries(cci, true); ArraySetAsSeries(vol, true); ArraySetAsSeries(obv, true);
+   double bbMid[], bbUp[], bbLow[], atr[];
+   double stochK[], stochD[], rsi[];
+   
    ArraySetAsSeries(bbMid, true); ArraySetAsSeries(bbUp, true); ArraySetAsSeries(bbLow, true);
    ArraySetAsSeries(atr, true);
+   ArraySetAsSeries(stochK, true); ArraySetAsSeries(stochD, true);
+   ArraySetAsSeries(rsi, true);
 
-   if(CopyBuffer(hEMA50, 0, shift, 3, ema50) < 3) return result;
-   if(CopyBuffer(hEMA200, 0, shift, 3, ema200) < 3) return result;
-   if(CopyBuffer(hMACD, 0, shift, 3, macdMain) < 3) return result;
-   if(CopyBuffer(hMACD, 1, shift, 3, macdSig) < 3) return result;
-   if(CopyBuffer(hADX, 0, shift, 3, adx) < 3) return result;
-   if(CopyBuffer(hADX, 1, shift, 3, plusDI) < 3) return result;
-   if(CopyBuffer(hADX, 2, shift, 3, minusDI) < 3) return result;
-   if(CopyBuffer(hRSI, 0, shift, 3, rsi) < 3) return result;
-   if(CopyBuffer(hStoch, 0, shift, 3, stochK) < 3) return result;
-   if(CopyBuffer(hStoch, 1, shift, 3, stochD) < 3) return result;
-   if(CopyBuffer(hCCI, 0, shift, 3, cci) < 3) return result;
-   if(CopyBuffer(hVol, 0, shift, 3, vol) < 3) return result;
-   if(CopyBuffer(hOBV, 0, shift, 3, obv) < 3) return result;
    if(CopyBuffer(hBB, 0, shift, 3, bbMid) < 3) return result;
    if(CopyBuffer(hBB, 1, shift, 3, bbUp) < 3) return result;
    if(CopyBuffer(hBB, 2, shift, 3, bbLow) < 3) return result;
    if(CopyBuffer(hATR, 0, shift, 3, atr) < 3) return result;
+   if(CopyBuffer(hStoch, 0, shift, 3, stochK) < 3) return result;
+   if(CopyBuffer(hStoch, 1, shift, 3, stochD) < 3) return result;
+   if(CopyBuffer(hRSI, 0, shift, 3, rsi) < 3) return result;
 
-   //=== 3. РАСЧЁТ ГОЛОСОВ (ПРОФЕССИОНАЛЬНАЯ ЛОГИКА) ===
-   int votes[10];
-   int bullVotes = 0, bearVotes = 0;
-
-   // 0. EMA50: Цена выше быстрой EMA
-   votes[0] = (close[1] > ema50[1]) ? 1 : -1;
-   if(votes[0] > 0) bullVotes++; else bearVotes++;
-
-   // 1. EMA200: Цена выше медленной EMA (глобальный тренд)
-   votes[1] = (close[1] > ema200[1]) ? 1 : -1;
-   if(votes[1] > 0) bullVotes++; else bearVotes++;
-
-   // 2. MACD: Гистограмма выше нуля
-   if(macdMain[1] > macdSig[1]) { votes[2] = 1; bullVotes++; }
-   else { votes[2] = -1; bearVotes++; }
-
-   // 3. ADX: Сила тренда. Если ADX < 20, тренда нет (0 голосов)
-   if(adx[1] > 20.0) {
-      votes[3] = (plusDI[1] > minusDI[1]) ? 1 : -1;
-      if(votes[3] > 0) bullVotes++; else bearVotes++;
-   } else {
-      votes[3] = 0; // Флэт, нейтрально
-   }
-
-   // 4. RSI: Исправленная логика. 55/45 вместо 50 для фильтрации шума
-   if(rsi[1] > 55.0) { votes[4] = 1; bullVotes++; }
-   else if(rsi[1] < 45.0) { votes[4] = -1; bearVotes++; }
-   else { votes[4] = 0; } // Нейтральная зона
-
-   // 5. Stochastic: Выше 50 бычий, ниже 50 медвежий
-   if(stochK[1] > 50.0) { votes[5] = 1; bullVotes++; }
-   else if(stochK[1] < 50.0) { votes[5] = -1; bearVotes++; }
-   else { votes[5] = 0; }
-
-   // 6. CCI: Выше 50 бычий, ниже -50 медвежий
-   if(cci[1] > 50.0) { votes[6] = 1; bullVotes++; }
-   else if(cci[1] < -50.0) { votes[6] = -1; bearVotes++; }
-   else { votes[6] = 0; }
-
-   // 7. Volume: Рост объема на бычьей/медвежьей свече
-   if(vol[1] > vol[2] * 1.1) {
-      votes[7] = (close[1] > open[1]) ? 1 : -1;
-      if(votes[7] > 0) bullVotes++; else bearVotes++;
-   } else {
-      votes[7] = 0;
-   }
-
-   // 8. OBV: Рост объема
-   votes[8] = (obv[1] > obv[2]) ? 1 : -1;
-   if(votes[8] > 0) bullVotes++; else bearVotes++;
-
-   // 9. Bollinger Bands: Цена выше средней линии
-   votes[9] = (close[1] > bbMid[1]) ? 1 : -1;
-   if(votes[9] > 0) bullVotes++; else bearVotes++;
-
-   //=== 4. ПРОВЕРКА КОНФЛЮЭНСА (Минимум 3 из 10 индикаторов должны быть согласны) ===
-   if(bullVotes < 3 && bearVotes < 3) {
-      result.signal = "HOLD";
-      result.weightedSum = 0;
-      result.totalSum = 0;
-      for(int i=0; i<10; i++) result.votes[i] = votes[i];
-      result.atrValue = atr[1];
-      result.currentPrice = close[1];
-      result.targetPrice = close[1];
-      result.candlesForecast = 0;
-      return result;
-   }
-
-   //=== 5. ВЗВЕШЕННАЯ СУММА ===
-   double weightedSum = 0;
-   for(int i = 0; i < 10; i++) {
-      weightedSum += votes[i] * IND_WEIGHTS[i];
-   }
-   
-   // Штраф за флэт (ADX < 20): уменьшаем силу сигнала на 50%
-   if(adx[1] < 20.0) {
-      weightedSum *= 0.5;
-   }
-
-   result.weightedSum = weightedSum;
-   result.totalSum = (int)weightedSum;
-   for(int i = 0; i < 10; i++) result.votes[i] = votes[i];
-
-   //=== 6. ОПРЕДЕЛЕНИЕ СИГНАЛА ===
-   if(weightedSum >= params.signalThreshold) result.signal = "STRONG BUY";
-   else if(weightedSum >= SIGNAL_WEAK_THRESHOLD) result.signal = "BUY";
-   else if(weightedSum <= -params.signalThreshold) result.signal = "STRONG SELL";
-   else if(weightedSum <= -SIGNAL_WEAK_THRESHOLD) result.signal = "SELL";
-   else result.signal = "HOLD";
-
-   //=== 7. РАСЧЁТ ATR И ПРОГНОЗА ===
    result.atrValue = atr[1];
    result.currentPrice = close[1];
+
+   //=== 2. ПРОВЕРКА УСЛОВИЙ ДЛЯ BUY ===
+   // Условие 1: Цена касается или ниже нижней полосы BB
+   bool buyBB = (close[1] <= bbLow[1] || low[1] <= bbLow[1]);
    
-   int baseCandlesTF = (tf == PERIOD_H1) ? BASE_CANDLES_H1 : 
-                       (tf == PERIOD_H4) ? BASE_CANDLES_H4 : BASE_CANDLES_D1;
+   // Условие 2: Stochastic в зоне перепроданности (< 20) И разворот (K пересекает D снизу вверх)
+   bool buyStoch = (stochK[1] < 25.0 && stochK[1] > stochD[1] && stochK[2] <= stochD[2]);
    
-   double signalStrength = MathAbs(weightedSum);
-   int baseCandles = baseCandlesTF;
-   if(signalStrength >= SIGNAL_STRONG) baseCandles = baseCandlesTF + 1;
-   else if(signalStrength < SIGNAL_WEAK_THRESHOLD) baseCandles = MathMax(1, baseCandlesTF - 1);
+   // Условие 3: RSI подтверждает перепроданность (< 35)
+   bool buyRSI = (rsi[1] < 35.0);
 
-   int minC = (tf == PERIOD_H1) ? MIN_CANDLES_H1 : (tf == PERIOD_H4) ? MIN_CANDLES_H4 : MIN_CANDLES_D1;
-   int maxC = (tf == PERIOD_H1) ? MAX_CANDLES_H1 : (tf == PERIOD_H4) ? MAX_CANDLES_H4 : MAX_CANDLES_D1;
-   result.candlesForecast = MathMax(minC, MathMin(maxC, baseCandles));
+   //=== 3. ПРОВЕРКА УСЛОВИЙ ДЛЯ SELL ===
+   // Условие 1: Цена касается или выше верхней полосы BB
+   bool sellBB = (close[1] >= bbUp[1] || high[1] >= bbUp[1]);
+   
+   // Условие 2: Stochastic в зоне перекупленности (> 75) И разворот вниз
+   bool sellStoch = (stochK[1] > 75.0 && stochK[1] < stochD[1] && stochK[2] >= stochD[2]);
+   
+   // Условие 3: RSI подтверждает перекупленность (> 65)
+   bool sellRSI = (rsi[1] > 65.0);
 
-   //=== 8. РАСЧЁТ ЦЕЛЕВОЙ ЦЕНЫ ===
-   double multiplier = 0;
-   if(tf == PERIOD_H1) multiplier = TP_MULT_H1_BASE + (result.candlesForecast * TP_MULT_H1_STEP);
-   else if(tf == PERIOD_H4) multiplier = TP_MULT_H4_BASE + (result.candlesForecast * TP_MULT_H4_STEP);
-   else if(tf == PERIOD_D1) multiplier = TP_MULT_D1_BASE + (result.candlesForecast * TP_MULT_D1_STEP);
-   else multiplier = 1.5;
+   //=== 4. ОПРЕДЕЛЕНИЕ СИГНАЛА ===
+   // BUY: BB + Stochastic ОБЯЗАТЕЛЬНЫ, RSI опционален (но дает бонус)
+   int buyScore = 0;
+   if(buyBB) buyScore += 2;
+   if(buyStoch) buyScore += 2;
+   if(buyRSI) buyScore += 1;
 
-   if(weightedSum > 0)
-      result.targetPrice = result.currentPrice + (result.atrValue * multiplier);
-   else if(weightedSum < 0)
-      result.targetPrice = result.currentPrice - (result.atrValue * multiplier);
-   else
-      result.targetPrice = result.currentPrice;
+   int sellScore = 0;
+   if(sellBB) sellScore += 2;
+   if(sellStoch) sellScore += 2;
+   if(sellRSI) sellScore += 1;
+
+   // Для сигнала нужны ОБА главных условия (BB + Stochastic) = минимум 4 балла
+   // С RSI = 5 баллов (STRONG)
+   if(buyScore >= 4) {
+      result.signal = (buyScore == 5) ? "STRONG BUY" : "BUY";
+      result.weightedSum = buyScore;
+      result.targetPrice = bbMid[1]; // TP = средняя линия BB
+   } 
+   else if(sellScore >= 4) {
+      result.signal = (sellScore == 5) ? "STRONG SELL" : "SELL";
+      result.weightedSum = -sellScore;
+      result.targetPrice = bbMid[1]; // TP = средняя линия BB
+   } 
+   else {
+      result.signal = "HOLD";
+      result.weightedSum = 0;
+      result.targetPrice = close[1];
+   }
+
+   // Заполняем votes для UI
+   for(int i = 0; i < 10; i++) {
+      if(result.weightedSum > 0) result.votes[i] = 1;
+      else if(result.weightedSum < 0) result.votes[i] = -1;
+      else result.votes[i] = 0;
+   }
+
+   // Прогноз: 2-4 свечи до возврата к средней линии
+   result.candlesForecast = (result.signal == "STRONG BUY" || result.signal == "STRONG SELL") ? 4 : 2;
 
    return result;
 }
