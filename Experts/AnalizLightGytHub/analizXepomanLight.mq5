@@ -112,6 +112,23 @@ input group "══════ НАСТРОЙКИ БЭКТЕСТА ════
 input int    backtestBars      = 1000;
 input bool   OptimizeParams    = true;
 
+//=== СЕТКА ОПТИМИЗАЦИИ (min / max / step) ===
+input group "══════ СЕТКА ОПТИМИЗАЦИИ (min/max/step) ══════"
+input double OptThresholdMin   = 4.0;    // Порог сигнала: МИН
+input double OptThresholdMax   = 10.0;   // Порог сигнала: МАКС
+input double OptThresholdStep  = 1.0;    // Порог сигнала: ШАГ
+
+input double OptATRMin         = 1.0;    // ATR SL множитель: МИН
+input double OptATRMax         = 3.0;    // ATR SL множитель: МАКС
+input double OptATRStep        = 0.5;    // ATR SL множитель: ШАГ
+
+input int    OptEMAMin         = 20;     // EMA период: МИН
+input int    OptEMAMax         = 60;     // EMA период: МАКС
+input int    OptEMAStep        = 10;     // EMA период: ШАГ
+
+input int    OptRSIMin         = 7;      // RSI период: МИН
+input int    OptRSIMax         = 21;     // RSI период: МАКС
+input int    OptRSIStep        = 2;      // RSI период: ШАГ
 //+------------------------------------------------------------------+
 int OnInit()
 {
@@ -884,8 +901,9 @@ void DeleteLevels()
    ObjectDelete(0, "ResistLine"); ObjectDelete(0, "SupportLine");
 }
 
+
 //+------------------------------------------------------------------+
-//| БЭКТЕСТ (использует ту же функцию AnalyzeSignal)                 |
+//| БЭКТЕСТ (ОПТИМИЗИРОВАНО: хендлы создаются 1 раз на комбинацию)   |
 //+------------------------------------------------------------------+
 void RunBacktest()
 {
@@ -903,49 +921,88 @@ void RunBacktest()
    int actualBars = MathMin(backtestBars, availableBars - 20);
    Print("📊 Будет проверено баров H1: ", actualBars);
    
-   double testThresholds[] = {
-      MathMax(1.0, optParams.signalThreshold - 2.0),
-      MathMax(1.0, optParams.signalThreshold - 1.0),
-      optParams.signalThreshold,
-      optParams.signalThreshold + 1.0,
-      optParams.signalThreshold + 2.0
-   };
-   double testATRMultipliers[] = {
-      MathMax(0.5, optParams.atrSLMult - 0.5),
-      optParams.atrSLMult,
-      optParams.atrSLMult + 0.5,
-      optParams.atrSLMult + 1.0
-   };
-   int testEMAPeriods[] = {
-      (int)MathMax(10, optParams.emaFastPeriod - 20),
-      optParams.emaFastPeriod,
-      optParams.emaFastPeriod + 20,
-      optParams.emaFastPeriod + 40
-   };
-   int testRSIPeriods[] = {
-      (int)MathMax(5, optParams.rsiPeriod - 4),
-      optParams.rsiPeriod,
-      optParams.rsiPeriod + 4,
-      optParams.rsiPeriod + 8
-   };
+   //=== ПОСТРОЕНИЕ СЕТОК ПАРАМЕТРОВ (прямо здесь) ===
+   double testThresholds[];
+   int tCount = 0;
+   if(OptThresholdStep > 0 && OptThresholdMax >= OptThresholdMin)
+   {
+      tCount = (int)MathFloor((OptThresholdMax - OptThresholdMin) / OptThresholdStep) + 1;
+      ArrayResize(testThresholds, tCount);
+      for(int i = 0; i < tCount; i++)
+         testThresholds[i] = OptThresholdMin + i * OptThresholdStep;
+   }
+   else
+   {
+      tCount = 1;
+      ArrayResize(testThresholds, 1);
+      testThresholds[0] = optParams.signalThreshold;
+   }
+   
+   double testATRMultipliers[];
+   int aCount = 0;
+   if(OptATRStep > 0 && OptATRMax >= OptATRMin)
+   {
+      aCount = (int)MathFloor((OptATRMax - OptATRMin) / OptATRStep) + 1;
+      ArrayResize(testATRMultipliers, aCount);
+      for(int i = 0; i < aCount; i++)
+         testATRMultipliers[i] = OptATRMin + i * OptATRStep;
+   }
+   else
+   {
+      aCount = 1;
+      ArrayResize(testATRMultipliers, 1);
+      testATRMultipliers[0] = optParams.atrSLMult;
+   }
+   
+   int testEMAPeriods[];
+   int eCount = 0;
+   if(OptEMAStep > 0 && OptEMAMax >= OptEMAMin)
+   {
+      eCount = (OptEMAMax - OptEMAMin) / OptEMAStep + 1;
+      ArrayResize(testEMAPeriods, eCount);
+      for(int i = 0; i < eCount; i++)
+         testEMAPeriods[i] = OptEMAMin + i * OptEMAStep;
+   }
+   else
+   {
+      eCount = 1;
+      ArrayResize(testEMAPeriods, 1);
+      testEMAPeriods[0] = optParams.emaFastPeriod;
+   }
+   
+   int testRSIPeriods[];
+   int rCount = 0;
+   if(OptRSIStep > 0 && OptRSIMax >= OptRSIMin)
+   {
+      rCount = (OptRSIMax - OptRSIMin) / OptRSIStep + 1;
+      ArrayResize(testRSIPeriods, rCount);
+      for(int i = 0; i < rCount; i++)
+         testRSIPeriods[i] = OptRSIMin + i * OptRSIStep;
+   }
+   else
+   {
+      rCount = 1;
+      ArrayResize(testRSIPeriods, 1);
+      testRSIPeriods[0] = optParams.rsiPeriod;
+   }
    
    double bestAccuracy = 0.0;
    IndicatorParams bestParams;
-   bestParams.Init(); // Инициализация значений по умолчанию
+   bestParams.Init();
    int bestTotalTrades = 0, bestWins = 0;
    int bestTotalH1 = 0, bestWinsH1 = 0, bestLossesH1 = 0;
    int bestTotalH4 = 0, bestWinsH4 = 0, bestLossesH4 = 0;
    int bestTotalD1 = 0, bestWinsD1 = 0, bestLossesD1 = 0;
    
-   int totalCombinations = ArraySize(testThresholds) * ArraySize(testATRMultipliers) * 
-                           ArraySize(testEMAPeriods) * ArraySize(testRSIPeriods);
+   int totalCombinations = tCount * aCount * eCount * rCount;
    int currentCombination = 0;
    Print("🔄 Начало оптимизации: ", totalCombinations, " комбинаций...");
+   Print("   Порог: ", tCount, " значений | ATR: ", aCount, " | EMA: ", eCount, " | RSI: ", rCount);
    
-   for(int t = 0; t < ArraySize(testThresholds); t++)
-   for(int a = 0; a < ArraySize(testATRMultipliers); a++)
-   for(int e = 0; e < ArraySize(testEMAPeriods); e++)
-   for(int r = 0; r < ArraySize(testRSIPeriods); r++)
+   for(int t = 0; t < tCount; t++)
+   for(int a = 0; a < aCount; a++)
+   for(int e = 0; e < eCount; e++)
+   for(int r = 0; r < rCount; r++)
    {
       currentCombination++;
       if(currentCombination % 10 == 0) Print("⏳ Оптимизация: ", currentCombination, " из ", totalCombinations);
@@ -955,6 +1012,22 @@ void RunBacktest()
       testParams.atrSLMult = testATRMultipliers[a];
       testParams.emaFastPeriod = testEMAPeriods[e];
       testParams.rsiPeriod = testRSIPeriods[r];
+      
+      //=== СОЗДАЁМ ХЕНДЛЫ 1 РАЗ НА КОМБИНАЦИЮ ===
+      int hRSI_H1_bt = iRSI(_Symbol, PERIOD_H1, testParams.rsiPeriod, PRICE_CLOSE);
+      int hRSI_H4_bt = iRSI(_Symbol, PERIOD_H4, testParams.rsiPeriod, PRICE_CLOSE);
+      int hRSI_D1_bt = iRSI(_Symbol, PERIOD_D1, testParams.rsiPeriod, PRICE_CLOSE);
+      int hATR_H1_bt = iATR(_Symbol, PERIOD_H1, testParams.atrPeriod);
+      int hATR_H4_bt = iATR(_Symbol, PERIOD_H4, testParams.atrPeriod);
+      int hATR_D1_bt = iATR(_Symbol, PERIOD_D1, testParams.atrPeriod);
+      
+      if(hRSI_H1_bt == INVALID_HANDLE || hRSI_H4_bt == INVALID_HANDLE || hRSI_D1_bt == INVALID_HANDLE ||
+         hATR_H1_bt == INVALID_HANDLE || hATR_H4_bt == INVALID_HANDLE || hATR_D1_bt == INVALID_HANDLE)
+      {
+         IndicatorRelease(hRSI_H1_bt); IndicatorRelease(hRSI_H4_bt); IndicatorRelease(hRSI_D1_bt);
+         IndicatorRelease(hATR_H1_bt); IndicatorRelease(hATR_H4_bt); IndicatorRelease(hATR_D1_bt);
+         continue;
+      }
       
       int totalH1 = 0, winsH1 = 0, lossesH1 = 0, canceledH1 = 0;
       int totalH4 = 0, winsH4 = 0, lossesH4 = 0, canceledH4 = 0;
@@ -975,8 +1048,10 @@ void RunBacktest()
          {
             IndicatorVotes sig = AnalyzeSignal(PERIOD_H1, shift, hEMA50_H1, hEMA200_H1, hMACD_H1, hADX_H1, hRSI_H1,
                                                hStoch_H1, hCCI_H1, hVol_H1, hOBV_H1, hBB_H1, hATR_H1, testParams);
-            if(MathAbs(sig.weightedSum) >= testParams.signalThreshold && CheckCandleAndRSI(shift, PERIOD_H1, sig.weightedSum, testParams))
-               SimulateTradeWithFile(shift, PERIOD_H1, sig.weightedSum, testParams.atrSLMult, totalH1, winsH1, lossesH1, canceledH1, testParams, barTime, sig.candlesForecast);
+            if(MathAbs(sig.weightedSum) >= testParams.signalThreshold && 
+               CheckCandleAndRSI(shift, PERIOD_H1, sig.weightedSum, hRSI_H1_bt, testParams))
+               SimulateTradeWithFile(shift, PERIOD_H1, sig.weightedSum, testParams.atrSLMult, 
+                                     totalH1, winsH1, lossesH1, canceledH1, testParams, barTime, sig.candlesForecast, hATR_H1_bt);
          }
          if(UseSignalH4)
          {
@@ -985,8 +1060,10 @@ void RunBacktest()
             {
                IndicatorVotes sig = AnalyzeSignal(PERIOD_H4, currentH4, hEMA50_H4, hEMA200_H4, hMACD_H4, hADX_H4, hRSI_H4,
                                                   hStoch_H4, hCCI_H4, hVol_H4, hOBV_H4, hBB_H4, hATR_H4, testParams);
-               if(MathAbs(sig.weightedSum) >= testParams.signalThreshold && CheckCandleAndRSI(currentH4, PERIOD_H4, sig.weightedSum, testParams))
-                  SimulateTradeWithFile(currentH4, PERIOD_H4, sig.weightedSum, testParams.atrSLMult, totalH4, winsH4, lossesH4, canceledH4, testParams, barTime, sig.candlesForecast);
+               if(MathAbs(sig.weightedSum) >= testParams.signalThreshold && 
+                  CheckCandleAndRSI(currentH4, PERIOD_H4, sig.weightedSum, hRSI_H4_bt, testParams))
+                  SimulateTradeWithFile(currentH4, PERIOD_H4, sig.weightedSum, testParams.atrSLMult, 
+                                        totalH4, winsH4, lossesH4, canceledH4, testParams, barTime, sig.candlesForecast, hATR_H4_bt);
                lastCheckedH4 = currentH4;
             }
          }
@@ -997,12 +1074,18 @@ void RunBacktest()
             {
                IndicatorVotes sig = AnalyzeSignal(PERIOD_D1, currentD1, hEMA50_D1, hEMA200_D1, hMACD_D1, hADX_D1, hRSI_D1,
                                                   hStoch_D1, hCCI_D1, hVol_D1, hOBV_D1, hBB_D1, hATR_D1, testParams);
-               if(MathAbs(sig.weightedSum) >= testParams.signalThreshold && CheckCandleAndRSI(currentD1, PERIOD_D1, sig.weightedSum, testParams))
-                  SimulateTradeWithFile(currentD1, PERIOD_D1, sig.weightedSum, testParams.atrSLMult, totalD1, winsD1, lossesD1, canceledD1, testParams, barTime, sig.candlesForecast);
+               if(MathAbs(sig.weightedSum) >= testParams.signalThreshold && 
+                  CheckCandleAndRSI(currentD1, PERIOD_D1, sig.weightedSum, hRSI_D1_bt, testParams))
+                  SimulateTradeWithFile(currentD1, PERIOD_D1, sig.weightedSum, testParams.atrSLMult, 
+                                        totalD1, winsD1, lossesD1, canceledD1, testParams, barTime, sig.candlesForecast, hATR_D1_bt);
                lastCheckedD1 = currentD1;
             }
          }
       }
+      
+      //=== ОСВОБОЖДАЕМ ХЕНДЛЫ ===
+      IndicatorRelease(hRSI_H1_bt); IndicatorRelease(hRSI_H4_bt); IndicatorRelease(hRSI_D1_bt);
+      IndicatorRelease(hATR_H1_bt); IndicatorRelease(hATR_H4_bt); IndicatorRelease(hATR_D1_bt);
       
       int realTotal = winsH1 + lossesH1 + winsH4 + lossesH4 + winsD1 + lossesD1;
       int wins = winsH1 + winsH4 + winsD1;
@@ -1033,40 +1116,50 @@ void RunBacktest()
    Print("   ▶ Точность: ", DoubleToString(bestAccuracy, 1), "%");
    Print("   ▶ Сигналов: ", bestTotalTrades, " (WIN: ", bestWins, " | LOSS: ", bestTotalTrades - bestWins, ")");
    
-     if(bestTotalH1 > 0) { 
+   if(bestTotalH1 > 0) { 
       int r = bestWinsH1 + bestLossesH1; 
       if(r > 0) Print("   H1: ", DoubleToString(bestWinsH1 * 100.0 / r, 1), "%"); 
-      else Print("   H1: нет завершённых сделок (все отменены/таймаут)");
+      else Print("   H1: нет завершённых сделок");
    }
    if(bestTotalH4 > 0) { 
       int r = bestWinsH4 + bestLossesH4; 
       if(r > 0) Print("   H4: ", DoubleToString(bestWinsH4 * 100.0 / r, 1), "%"); 
-      else Print("   H4: нет завершённых сделок (все отменены/таймаут)");
+      else Print("   H4: нет завершённых сделок");
    }
    if(bestTotalD1 > 0) { 
       int r = bestWinsD1 + bestLossesD1; 
       if(r > 0) Print("   D1: ", DoubleToString(bestWinsD1 * 100.0 / r, 1), "%"); 
-      else Print("   D1: нет завершённых сделок (все отменены/таймаут)");
+      else Print("   D1: нет завершённых сделок");
    }
 }
 
-bool CheckCandleAndRSI(int shift, ENUM_TIMEFRAMES tf, double wSum, IndicatorParams &params)
+//+------------------------------------------------------------------+
+//| Проверка свечи и RSI (ОПТИМИЗИРОВАНО: хендл RSI передаётся)      |
+//+------------------------------------------------------------------+
+bool CheckCandleAndRSI(int shift, ENUM_TIMEFRAMES tf, double wSum, int hRSI, IndicatorParams &params)
 {
    double close[], open[], rsi[];
-   ArraySetAsSeries(close, true); ArraySetAsSeries(open, true); ArraySetAsSeries(rsi, true);
+   ArraySetAsSeries(close, true); 
+   ArraySetAsSeries(open, true); 
+   ArraySetAsSeries(rsi, true);
+   
    if(CopyClose(_Symbol, tf, shift, 3, close) < 3) return false;
    if(CopyOpen(_Symbol, tf, shift, 3, open) < 3) return false;
-   int hRSI = iRSI(_Symbol, tf, params.rsiPeriod, PRICE_CLOSE);
-   if(hRSI == INVALID_HANDLE) return false;
    if(CopyBuffer(hRSI, 0, shift, 3, rsi) < 3) return false;
+   
    bool candleOk = (wSum > 0 && close[1] > open[1]) || (wSum < 0 && close[1] < open[1]);
    bool rsiOk = (wSum > 0 && rsi[1] < RSI_FILTER_BUY_MAX) || (wSum < 0 && rsi[1] > RSI_FILTER_SELL_MIN);
+   
    return (candleOk && rsiOk);
 }
 
+//+------------------------------------------------------------------+
+//| Симуляция сделки (ОПТИМИЗИРОВАНО: хендл ATR передаётся)          |
+//+------------------------------------------------------------------+
 bool SimulateTradeWithFile(int shift, ENUM_TIMEFRAMES tf, double wSum, double atrMult,
                            int &totalTests, int &wins, int &losses, int &canceled,
-                           IndicatorParams &params, datetime signalTime, int candlesForecast)
+                           IndicatorParams &params, datetime signalTime, int candlesForecast,
+                           int hATR)
 {
    int lifetimeMinutes = CalculateSignalLifetimeForBacktest(tf, wSum, candlesForecast);
    int lifetimeBars = (tf == PERIOD_H1) ? lifetimeMinutes / 60 : (tf == PERIOD_H4) ? lifetimeMinutes / 240 : lifetimeMinutes / 1440;
@@ -1077,8 +1170,6 @@ bool SimulateTradeWithFile(int shift, ENUM_TIMEFRAMES tf, double wSum, double at
    
    double atr[];
    ArraySetAsSeries(atr, true);
-   int hATR = iATR(_Symbol, tf, params.atrPeriod);
-   if(hATR == INVALID_HANDLE) return false;
    if(CopyBuffer(hATR, 0, shift, 2, atr) < 2) return false;
    double currentATR = atr[0];
    if(currentATR <= 0) return false;
@@ -1131,7 +1222,7 @@ bool SimulateTradeWithFile(int shift, ENUM_TIMEFRAMES tf, double wSum, double at
    int handle = FileOpen(reportFile, FILE_READ|FILE_WRITE|FILE_CSV|FILE_ANSI, ';');
    if(handle != INVALID_HANDLE)
    {
-      if(FileSize(handle) == 0)
+      if((int)FileSize(handle) == 0)
          FileWrite(handle, "SignalTime", "TF", "Direction", "Entry", "SL", "TP", "ExitPrice", "Result", "Movement", "Lifetime", "WeightedSum");
       FileSeek(handle, 0, SEEK_END);
       FileWrite(handle, TimeToString(signalTime, TIME_DATE|TIME_MINUTES), tfStr, direction,
