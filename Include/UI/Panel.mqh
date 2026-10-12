@@ -189,9 +189,11 @@ bool UI_OnChartEvent(const int id, const long &lparam, const double &dparam, con
       if(StringFind(sparam, PANEL_NAME + "_C3_Reset") >= 0) 
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         if(MessageBox("Обнулить статистику?", "Подтверждение", MB_YESNO|MB_ICONQUESTION) == IDYES) 
+         if(MessageBox("Обнулить статистику И закрыть все позиции/ордера?\n\n⚠️ Это реальная операция с вашим счётом!", 
+                       "Подтверждение", MB_YESNO|MB_ICONWARNING) == IDYES) 
          {
-            Storage_ResetStats(); 
+            Executor_CloseAll();      // ← Закрываем всё реальное
+            Storage_ResetStats();  
             UI_DeleteAll(); 
             UI_CreateBasePanel(); 
             if(!isCollapsed) UI_CreateTabs(); 
