@@ -1,3 +1,7 @@
 DateTime;Symbol;Mode;Direction;Entry;SL;TP;WeightedSum;ATR;RR_Ratio
 Symbol;Mode;Direction;Entry;SL;TP;WeightedSum;ATR;RR_Ratio;Symbol
-Mode;Direction;Entry;SL;TP;WeightedSum;ATR;RR_Ratio;2026.10.09 12:46;2026.10.12 05:50
+Mode;Direction;Entry;SL;TP;WeightedSum;ATR;RR_Ratio;Symbol;Mode
+Direction;Entry;SL;TP;WeightedSum;ATR;RR_Ratio;Symbol;Mode;Direction
+Entry;SL;TP;WeightedSum;ATR;RR_Ratio;Symbol;Mode;Direction;Entry
+SL;TP;WeightedSum;ATR;RR_Ratio;2026.10.09 12:46;2026.10.12 05:50;2026.10.12 11:00;XAUUSD;H1
+SELL;4178.28;4195.35;4145.84;-6.5;11.38;1.90;;;
