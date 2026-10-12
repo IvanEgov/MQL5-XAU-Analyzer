@@ -23,6 +23,12 @@
 !/Include/Analyzer.mqh
 !/Include/SignalManager.mqh
 !/Include/Storage.mqh
+!/Include/Backtester.mqh
+!/Include/Executor.mqh
+!/Include/MovingAverages.mqh
+!/Include/Object.mqh
+!/Include/StdLibErr.mqh
+!/Include/VirtualKeys.mqh
 !/Include/UI/
 
 # 5. Files — только заглушка, данные генерируются советником
