@@ -907,6 +907,7 @@ void RunBacktest()
    
    double bestAccuracy = 0.0;
    IndicatorParams bestParams;
+   bestParams.Init(); // Инициализация значений по умолчанию
    int bestTotalTrades = 0, bestWins = 0;
    int bestTotalH1 = 0, bestWinsH1 = 0, bestLossesH1 = 0;
    int bestTotalH4 = 0, bestWinsH4 = 0, bestLossesH4 = 0;

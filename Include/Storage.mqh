@@ -64,7 +64,7 @@ void Storage_LoadStats()
    int handle = FileOpen(statsFileName, FILE_READ|FILE_TXT|FILE_ANSI);
    if(handle == INVALID_HANDLE) { statsStartDate = TimeCurrent(); return; }
    
-   string content = FileReadString(handle, FileSize(handle));
+   string content = FileReadString(handle, (int)FileSize(handle));
    FileClose(handle);
    
    string savedSymbol = ExtractJsonString(content, "symbol");
