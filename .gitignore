@@ -1,43 +1,42 @@
-# === Скомпилированные файлы MetaTrader (НИКОГДА не коммитим) ===
-*.ex5
-*.ex4
-*.ex5.tmp
-*.ex4.tmp
+# ==========================================
+#  MQL5-XAU-Analyzer — белый список
+# ==========================================
 
-# === Временные файлы и бэкапы ===
-*.bak
-*.tmp
-*.swp
-*.swo
-*~
+# 1. Игнорируем ВСЁ в корне
+/*
 
-# === Файлы настроек и кэша оптимизации ===
-*.set
-*.opt
-*.cache
+# 2. Разрешаем только нужные каталоги
+!/.gitignore
+!/README.md
+!/Experts/
+!/Include/
+!/Files/
 
-# === Лог-файлы ===
-*.log
+# 3. Experts — только наш Light
+/Experts/*
+!/Experts/AnalizLightGytHub/
 
-# === Файлы операционных систем ===
-.DS_Store
-Thumbs.db
-desktop.ini
+# 4. Include — только наши модули (не стандартная библиотека MT5)
+/Include/*
+!/Include/Config.mqh
+!/Include/DataStructures.mqh
+!/Include/Analyzer.mqh
+!/Include/SignalManager.mqh
+!/Include/Storage.mqh
+!/Include/UI/
 
-# === Папки редакторов кода и IDE ===
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
+# 5. Files — только заглушка, данные генерируются советником
+/Files/*
+!/Files/.gitkeep
 
-# === Сгенерированные файлы данных (оставляем структуру, но игнорируем содержимое) ===
-# Если нужны шаблоны, их можно добавить принудительно через git add -f
-MQL5/Files/*.csv
-MQL5/Files/*.json
-MQL5/Files/*.dat
-MQL5/Files/*.txt
-!MQL5/Files/.gitkeep
-
-# === Папки сборки (если используются) ===
-/Build/
-/Release/
+# 6. Мусор — даже внутри разрешённых папок
+**/*.ex5
+**/*.ex4
+**/*.ex5.tmp
+**/*.bak
+**/*.tmp
+**/*.log
+**/*.set
+**/*.opt
+**/.DS_Store
+**/Thumbs.db
