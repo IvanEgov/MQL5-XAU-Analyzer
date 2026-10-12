@@ -10,6 +10,7 @@
 #include <Analyzer.mqh>
 #include <SignalManager.mqh>
 #include <Storage.mqh>
+#include <UI/Panel.mqh>
 
 //--- Глобальные параметры (оптимизируемые из input)
 IndicatorParams optParams;
@@ -53,8 +54,8 @@ int panelY = PANEL_Y;
 int panelWidth = PANEL_WIDTH;
 int panelHeightExpanded = PANEL_HEIGHT_EXPANDED;
 int panelHeightCollapsed = PANEL_HEIGHT_COLLAPSED;
-bool isCollapsed = false;
-int currentTab = 0;
+
+
 
 //--- Настройки
 input bool   UseSoundAlert     = true;
@@ -198,9 +199,7 @@ int OnInit()
       return(INIT_FAILED);
    }
    
-   CreatePanel();
-   CreateCollapseButton();
-   CreateTabs();
+   
    EventSetTimer(60);
    
    //=== ЗАГРУЗКА ДАННЫХ ИЗ ФАЙЛОВ ===
@@ -216,7 +215,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    isBacktestRunning = false;
-   DeletePanel();
+   
    DeleteLevels();
    EventKillTimer();
 }
@@ -233,6 +232,7 @@ void OnTick()
 //+------------------------------------------------------------------+
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
+   if(UI_OnChartEvent(id, lparam, dparam, sparam)) return;
    if(id == CHARTEVENT_OBJECT_CLICK)
    {
       if(sparam == buttonName)
@@ -1168,95 +1168,6 @@ bool SimulateTradeWithFile(int shift, ENUM_TIMEFRAMES tf, double wSum, double at
    return true;
 }
 
-//+------------------------------------------------------------------+
-//| ПАНЕЛЬ И ВКЛАДКИ                                                 |
-//+------------------------------------------------------------------+
-void CreatePanel()
-{
-   ObjectCreate(0, panelName+"_BG", OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_XDISTANCE, panelX);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_YDISTANCE, panelY);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_XSIZE, panelWidth);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_YSIZE, panelHeightExpanded);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_BGCOLOR, C'20,20,30');
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_BORDER_TYPE, BORDER_FLAT);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_COLOR, C'60,60,80');
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_WIDTH, 2);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_BACK, false);
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_SELECTABLE, false);
-}
-
-void CreateCollapseButton()
-{
-   ObjectCreate(0, buttonName, OBJ_BUTTON, 0, 0, 0);
-   ObjectSetInteger(0, buttonName, OBJPROP_XDISTANCE, panelX + panelWidth - 35);
-   ObjectSetInteger(0, buttonName, OBJPROP_YDISTANCE, panelY + 3);
-   ObjectSetInteger(0, buttonName, OBJPROP_XSIZE, 30);
-   ObjectSetInteger(0, buttonName, OBJPROP_YSIZE, 28);
-   ObjectSetString(0, buttonName, OBJPROP_TEXT, "▼");
-   ObjectSetInteger(0, buttonName, OBJPROP_COLOR, clrYellow);
-   ObjectSetInteger(0, buttonName, OBJPROP_BGCOLOR, C'40,40,60');
-   ObjectSetInteger(0, buttonName, OBJPROP_BORDER_COLOR, C'80,80,100');
-   ObjectSetString(0, buttonName, OBJPROP_FONT, "Arial Bold");
-   ObjectSetInteger(0, buttonName, OBJPROP_FONTSIZE, 12);
-   ObjectSetInteger(0, buttonName, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, buttonName, OBJPROP_HIDDEN, true);
-   ObjectSetInteger(0, buttonName, OBJPROP_STATE, false);
-}
-
-void CreateTabs()
-{
-   ObjectCreate(0, panelName+"_Prev", OBJ_BUTTON, 0, 0, 0);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_XDISTANCE, panelX + 5);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_YDISTANCE, panelY + 35);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_XSIZE, 25);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_YSIZE, 22);
-   ObjectSetString(0, panelName+"_Prev", OBJPROP_TEXT, "◀");
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_COLOR, clrYellow);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_BGCOLOR, C'40,40,60');
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_BORDER_COLOR, C'80,80,100');
-   ObjectSetString(0, panelName+"_Prev", OBJPROP_FONT, "Arial Bold");
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_FONTSIZE, 10);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_HIDDEN, true);
-   ObjectSetInteger(0, panelName+"_Prev", OBJPROP_STATE, false);
-   
-   int tabWidth = (panelWidth - 70) / TAB_COUNT;
-   for(int i = 0; i < TAB_COUNT; i++)
-   {
-      string btnName = panelName+"_Tab_"+IntegerToString(i);
-      ObjectCreate(0, btnName, OBJ_BUTTON, 0, 0, 0);
-      ObjectSetInteger(0, btnName, OBJPROP_XDISTANCE, panelX + 35 + i * tabWidth);
-      ObjectSetInteger(0, btnName, OBJPROP_YDISTANCE, panelY + 35);
-      ObjectSetInteger(0, btnName, OBJPROP_XSIZE, tabWidth - 2);
-      ObjectSetInteger(0, btnName, OBJPROP_YSIZE, 22);
-      ObjectSetString(0, btnName, OBJPROP_TEXT, TAB_NAMES[i]);
-      ObjectSetInteger(0, btnName, OBJPROP_COLOR, clrLightGray);
-      ObjectSetInteger(0, btnName, OBJPROP_BGCOLOR, C'35,35,50');
-      ObjectSetInteger(0, btnName, OBJPROP_BORDER_COLOR, C'80,80,100');
-      ObjectSetString(0, btnName, OBJPROP_FONT, "Arial Bold");
-      ObjectSetInteger(0, btnName, OBJPROP_FONTSIZE, 9);
-      ObjectSetInteger(0, btnName, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, btnName, OBJPROP_HIDDEN, true);
-      ObjectSetInteger(0, btnName, OBJPROP_STATE, false);
-   }
-   
-   ObjectCreate(0, panelName+"_Next", OBJ_BUTTON, 0, 0, 0);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_XDISTANCE, panelX + panelWidth - 30);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_YDISTANCE, panelY + 35);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_XSIZE, 25);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_YSIZE, 22);
-   ObjectSetString(0, panelName+"_Next", OBJPROP_TEXT, "▶");
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_COLOR, clrYellow);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_BGCOLOR, C'40,40,60');
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_BORDER_COLOR, C'80,80,100');
-   ObjectSetString(0, panelName+"_Next", OBJPROP_FONT, "Arial Bold");
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_FONTSIZE, 10);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_HIDDEN, true);
-   ObjectSetInteger(0, panelName+"_Next", OBJPROP_STATE, false);
-}
-
 void UpdateTabs()
 {
    for(int i = 0; i < TAB_COUNT; i++)
@@ -1638,12 +1549,4 @@ void CreateLabel(string name, string text, int x, int y, color clr, int fontSize
    ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
 }
 
-void DeletePanel()
-{
-   int total = ObjectsTotal(0);
-   for(int i = total - 1; i >= 0; i--)
-   {
-      string name = ObjectName(0, i);
-      if(StringFind(name, panelName) == 0 || name == buttonName) ObjectDelete(0, name);
-   }
-}
+
