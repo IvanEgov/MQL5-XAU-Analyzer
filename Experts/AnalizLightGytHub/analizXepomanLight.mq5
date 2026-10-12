@@ -10,6 +10,7 @@
 #include <Analyzer.mqh>
 #include <SignalManager.mqh>
 #include <Storage.mqh>
+#include <Executor.mqh>      // ← СЛОЙ 7: ИСПОЛНИТЕЛЬ
 #include <UI/Panel.mqh>
 
 //--- Глобальные параметры (оптимизируемые из input)
@@ -96,6 +97,16 @@ input int    InpAtrPeriod      = 14;
 input double InpAtrSlMult      = 2.5;
 input double InpSignalThreshold= 8.0;
 
+//=== ТОРГЛЯ (РЕАЛЬНОЕ ИСПОЛНЕНИЕ) ===
+input group "══════ ТОРГЛЯ (⚠️ ВКЛЮЧАЙ ОСОЗНАННО) ══════"
+ bool   EnableTrading     = false;    // ⚠️ Реальная торговля (по умолчанию ВЫКЛ)
+input int    MagicNumber       = 20261012; // Магик-номер советника
+input string TradeComment      = "XAU-AI"; // Комментарий ордера
+input bool   UseRiskPercent    = true;     // Расчёт лота от риска в %
+input double RiskPercent       = 1.0;      // Риск на сделку, %
+input double FixedLot          = 0.01;     // Фиксированный лот (если риск выключен)
+input int    MaxSpreadPoints   = 35;       // Максимальный спред (0 = без лимита)
+input int    MaxOpenPositions  = 1;        // Максимум одновременных позиций
 //=== НАСТРОЙКИ БЭКТЕСТА ===
 input group "══════ НАСТРОЙКИ БЭКТЕСТА ══════"
 input int    backtestBars      = 1000;
@@ -108,6 +119,8 @@ int OnInit()
    
    //=== ИНИЦИАЛИЗАЦИЯ МЕНЕДЖЕРА ===
    SignalManager_Init();
+      //=== ИНИЦИАЛИЗАЦИЯ ИСПОЛНИТЕЛЯ ===
+   Executor_Init(MagicNumber, TradeComment);
    
    //=== ИНИЦИАЛИЗАЦИЯ ПАРАМЕТРОВ ===
    optParams.emaFastPeriod = InpEmaFastPeriod;
@@ -655,6 +668,9 @@ void Analyze()
          Print("🔔 СИГНАЛ H1: ", sigH1);
          Storage_AddToHistory("H1", lastDirection, recEntryH1, recSLH1, recTPH1, resultH1.weightedSum);
          Storage_LogSignal("H1", lastDirection, recEntryH1, recSLH1, recTPH1, resultH1.weightedSum, resultH1.atrValue);
+                  //=== ВЫСТАВЛЕНИЕ РЕАЛЬНОГО ОРДЕРА ===
+         string orderResult = "";
+         Executor_OpenPosition(recOrderTypeH1, recEntryH1, recSLH1, recTPH1, "H1", orderResult);
       }
    }
    
@@ -679,6 +695,9 @@ void Analyze()
          Print("🔔 СИГНАЛ H4: ", sigH4);
          Storage_AddToHistory("H4", lastDirection, recEntryH4, recSLH4, recTPH4, resultH4.weightedSum);
          Storage_LogSignal("H4", lastDirection, recEntryH4, recSLH4, recTPH4, resultH4.weightedSum, resultH4.atrValue);
+                  //=== ВЫСТАВЛЕНИЕ РЕАЛЬНОГО ОРДЕРА ===
+         string orderResult = "";
+         Executor_OpenPosition(recOrderTypeH4, recEntryH4, recSLH4, recTPH4, "H4", orderResult);
       }
    }
    
@@ -703,6 +722,9 @@ void Analyze()
          Print("🔔 СИГНАЛ D1: ", sigD1);
          Storage_AddToHistory("D1", lastDirection, recEntryD1, recSLD1, recTPD1, resultD1.weightedSum);
          Storage_LogSignal("D1", lastDirection, recEntryD1, recSLD1, recTPD1, resultD1.weightedSum, resultD1.atrValue);
+                  //=== ВЫСТАВЛЕНИЕ РЕАЛЬНОГО ОРДЕРА ===
+         string orderResult = "";
+         Executor_OpenPosition(recOrderTypeD1, recEntryD1, recSLD1, recTPD1, "D1", orderResult);
       }
    }
    
@@ -723,6 +745,7 @@ void CheckSignalResult()
       canceledSignals++;
       totalSignals--;
       Print("⏰ Сигнал ИСТЁК. Аннулирован.");
+      Executor_Reset();   // Сбрасываем состояние исполнителя
       lastEntryPrice = 0;
       signalChecked = false;
       signalWasExecuted = false;
@@ -1010,9 +1033,21 @@ void RunBacktest()
    Print("   ▶ Точность: ", DoubleToString(bestAccuracy, 1), "%");
    Print("   ▶ Сигналов: ", bestTotalTrades, " (WIN: ", bestWins, " | LOSS: ", bestTotalTrades - bestWins, ")");
    
-   if(bestTotalH1 > 0) { int r = bestWinsH1 + bestLossesH1; Print("   H1: ", DoubleToString(bestWinsH1 * 100.0 / r, 1), "%"); }
-   if(bestTotalH4 > 0) { int r = bestWinsH4 + bestLossesH4; Print("   H4: ", DoubleToString(bestWinsH4 * 100.0 / r, 1), "%"); }
-   if(bestTotalD1 > 0) { int r = bestWinsD1 + bestLossesD1; Print("   D1: ", DoubleToString(bestWinsD1 * 100.0 / r, 1), "%"); }
+     if(bestTotalH1 > 0) { 
+      int r = bestWinsH1 + bestLossesH1; 
+      if(r > 0) Print("   H1: ", DoubleToString(bestWinsH1 * 100.0 / r, 1), "%"); 
+      else Print("   H1: нет завершённых сделок (все отменены/таймаут)");
+   }
+   if(bestTotalH4 > 0) { 
+      int r = bestWinsH4 + bestLossesH4; 
+      if(r > 0) Print("   H4: ", DoubleToString(bestWinsH4 * 100.0 / r, 1), "%"); 
+      else Print("   H4: нет завершённых сделок (все отменены/таймаут)");
+   }
+   if(bestTotalD1 > 0) { 
+      int r = bestWinsD1 + bestLossesD1; 
+      if(r > 0) Print("   D1: ", DoubleToString(bestWinsD1 * 100.0 / r, 1), "%"); 
+      else Print("   D1: нет завершённых сделок (все отменены/таймаут)");
+   }
 }
 
 bool CheckCandleAndRSI(int shift, ENUM_TIMEFRAMES tf, double wSum, IndicatorParams &params)
