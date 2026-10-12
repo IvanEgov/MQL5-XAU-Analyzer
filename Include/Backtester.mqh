@@ -342,7 +342,7 @@ void RunBacktest()
       int totalD1 = 0, winsD1 = 0, lossesD1 = 0, canceledD1 = 0;
       int lastCheckedH4 = -1, lastCheckedD1 = -1;
       
-      for(int shift = actualBars; shift >= 5; shift--)
+      for(int shift = actualBars-2; shift >= 5; shift--)
       {
          if(shift % BacktestStepBars != 0) continue;
          datetime barTime = iTime(_Symbol, PERIOD_H1, shift);
