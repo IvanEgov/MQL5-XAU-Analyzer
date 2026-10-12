@@ -196,7 +196,7 @@ int OnInit()
    Storage_LoadHistory();
    Storage_LoadActiveSignal();
    
-   //=== ИНИЦИАЛИЗАЦИЯ UI ===
+   //=== ИНИЦИАЛИЗАЦИЯ UI (Добавить в конец OnInit) ===
    g_currentSymbol = currentSymbol;
    g_symbolPoint = symbolPoint;
    UI_CreateBasePanel();
@@ -227,6 +227,7 @@ void OnTick()
 //+------------------------------------------------------------------+
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
+   // Передаем константные ссылки в UI модуль
    if(UI_OnChartEvent(id, lparam, dparam, sparam)) return;
 }
 
@@ -599,9 +600,9 @@ void Analyze()
       if(recEntryD1 > 0) signalFixedD1 = true;
    }
    
-   CalculateRecommendedLevels();
+ CalculateRecommendedLevels();
    
-   //=== СИНХРОНИЗАЦИЯ ДАННЫХ С UI МОДУЛЕМ ===
+   //=== СИНХРОНИЗАЦИЯ ДАННЫХ С UI МОДУЛЕМ (ОБЯЗАТЕЛЬНО) ===
    g_resultH1 = resultH1;
    g_resultH4 = resultH4;
    g_resultD1 = resultD1;
@@ -611,8 +612,8 @@ void Analyze()
    // Перерисовка текущей вкладки, если панель не свернута
    if(!isCollapsed)
    {
-      UI_DeleteTabContent(currentTab); 
-      UI_DrawCurrentTab();             
+      UI_DeleteTabContent(currentTab); // Очищаем старое содержимое
+      UI_DrawCurrentTab();             // Рисуем новое с актуальными данными
    }
    
    //=== ПРОВЕРКА ИСПОЛНЕНИЯ АКТИВНОГО СИГНАЛА ===
