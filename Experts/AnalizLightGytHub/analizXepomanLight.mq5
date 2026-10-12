@@ -27,7 +27,7 @@ string statsSymbol = "";
 //--- Бэктест
 bool isBacktestRunning = false;
 
-//--- Результаты анализа по ТФ
+//--- Результаты анализа по ТФ (локальные копии для логики)
 IndicatorVotes resultH1, resultH4, resultD1;
 
 //--- Хендлы индикаторов
@@ -45,17 +45,6 @@ int symbolDigits = 0;
 double symbolPoint = 0;
 long symbolSpread = 0;
 string currentSession = "";
-
-//--- Параметры панели
-string panelName = PANEL_NAME;
-string buttonName = BUTTON_NAME;
-int panelX = PANEL_X;
-int panelY = PANEL_Y;
-int panelWidth = PANEL_WIDTH;
-int panelHeightExpanded = PANEL_HEIGHT_EXPANDED;
-int panelHeightCollapsed = PANEL_HEIGHT_COLLAPSED;
-
-
 
 //--- Настройки
 input bool   UseSoundAlert     = true;
@@ -199,7 +188,6 @@ int OnInit()
       return(INIT_FAILED);
    }
    
-   
    EventSetTimer(60);
    
    //=== ЗАГРУЗКА ДАННЫХ ИЗ ФАЙЛОВ ===
@@ -208,6 +196,12 @@ int OnInit()
    Storage_LoadHistory();
    Storage_LoadActiveSignal();
    
+   //=== ИНИЦИАЛИЗАЦИЯ UI ===
+   g_currentSymbol = currentSymbol;
+   g_symbolPoint = symbolPoint;
+   UI_CreateBasePanel();
+   if(!isCollapsed) UI_CreateTabs();
+   
    Print("✅ ", currentSymbol, " (", symbolType, ") PRO-аналитик запущен");
    return(INIT_SUCCEEDED);
 }
@@ -215,12 +209,13 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    isBacktestRunning = false;
-   
    DeleteLevels();
-   EventKillTimer();
+   EventKillTimer(); 
+   UI_DeleteAll();   
 }
 
 void OnTimer() { Analyze(); }
+
 void OnTick()
 {
    Analyze();
@@ -233,76 +228,6 @@ void OnTick()
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
    if(UI_OnChartEvent(id, lparam, dparam, sparam)) return;
-   if(id == CHARTEVENT_OBJECT_CLICK)
-   {
-      if(sparam == buttonName)
-      {
-         isCollapsed = !isCollapsed;
-         ObjectSetInteger(0, buttonName, OBJPROP_STATE, false);
-         UpdateCollapseButton();
-         UpdatePanel();
-         ChartRedraw();
-      }
-      else if(StringFind(sparam, panelName+"_Tab_") == 0)
-      {
-         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         string tabNumStr = StringSubstr(sparam, StringLen(panelName+"_Tab_"));
-         int tabNum = (int)StringToInteger(tabNumStr);
-         if(tabNum >= 0 && tabNum < TAB_COUNT)
-         {
-            currentTab = tabNum;
-            UpdateTabs();
-            UpdatePanel();
-            ChartRedraw();
-         }
-      }
-      else if(sparam == panelName+"_Prev")
-      {
-         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         currentTab--;
-         if(currentTab < 0) currentTab = TAB_COUNT - 1;
-         UpdateTabs();
-         UpdatePanel();
-         ChartRedraw();
-      }
-      else if(sparam == panelName+"_Next")
-      {
-         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         currentTab++;
-         if(currentTab >= TAB_COUNT) currentTab = 0;
-         UpdateTabs();
-         UpdatePanel();
-         ChartRedraw();
-      }
-      else if(sparam == panelName+"_Reset")
-      {
-         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         if(MessageBox("Обнулить всю статистику?\n\nЭто действие нельзя отменить.", 
-                       "Подтверждение сброса", MB_YESNO|MB_ICONQUESTION) == IDYES)
-         {
-            Storage_ResetStats();
-            UpdatePanel();
-            ChartRedraw();
-         }
-      }
-      else if(StringFind(sparam, "_Backtest") >= 0)
-      {
-         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         if(isBacktestRunning)
-         {
-            Print("⏳ Бэктест уже запущен, подождите...");
-            return;
-         }
-         isBacktestRunning = true;
-         UpdatePanel();
-         ChartRedraw();
-         Sleep(100);
-         RunBacktest();
-         isBacktestRunning = false;
-         UpdatePanel();
-         ChartRedraw();
-      }
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -675,7 +600,20 @@ void Analyze()
    }
    
    CalculateRecommendedLevels();
-   UpdatePanel();
+   
+   //=== СИНХРОНИЗАЦИЯ ДАННЫХ С UI МОДУЛЕМ ===
+   g_resultH1 = resultH1;
+   g_resultH4 = resultH4;
+   g_resultD1 = resultD1;
+   g_currentSymbol = currentSymbol;
+   g_symbolPoint = symbolPoint;
+   
+   // Перерисовка текущей вкладки, если панель не свернута
+   if(!isCollapsed)
+   {
+      UI_DeleteTabContent(currentTab); 
+      UI_DrawCurrentTab();             
+   }
    
    //=== ПРОВЕРКА ИСПОЛНЕНИЯ АКТИВНОГО СИГНАЛА ===
    if(lastEntryPrice > 0 && !signalWasExecuted && !signalChecked)
@@ -845,7 +783,7 @@ void CheckSignalResult()
 }
 
 //+------------------------------------------------------------------+
-//| РАСЧЁТ СРОКА ЖИЗНИЯ                                              |
+//| РАСЧЁТ СРОКА ЖИЗНИ                                               |
 //+------------------------------------------------------------------+
 int CalculateSignalLifetime(string mode, double weightedSum, int candlesForecast)
 {
@@ -1167,386 +1105,3 @@ bool SimulateTradeWithFile(int shift, ENUM_TIMEFRAMES tf, double wSum, double at
    }
    return true;
 }
-
-void UpdateTabs()
-{
-   for(int i = 0; i < TAB_COUNT; i++)
-   {
-      string btnName = panelName+"_Tab_"+IntegerToString(i);
-      if(i == currentTab)
-      {
-         ObjectSetInteger(0, btnName, OBJPROP_BGCOLOR, C'60,80,120');
-         ObjectSetInteger(0, btnName, OBJPROP_COLOR, clrWhite);
-      }
-      else
-      {
-         ObjectSetInteger(0, btnName, OBJPROP_BGCOLOR, C'35,35,50');
-         ObjectSetInteger(0, btnName, OBJPROP_COLOR, clrLightGray);
-      }
-   }
-}
-
-void UpdateCollapseButton()
-{
-   if(isCollapsed) { ObjectSetString(0, buttonName, OBJPROP_TEXT, "▲"); ObjectSetInteger(0, buttonName, OBJPROP_COLOR, clrOrange); }
-   else { ObjectSetString(0, buttonName, OBJPROP_TEXT, "▼"); ObjectSetInteger(0, buttonName, OBJPROP_COLOR, clrYellow); }
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_YSIZE, isCollapsed ? panelHeightCollapsed : panelHeightExpanded);
-}
-
-void UpdatePanel()
-{
-   ObjectSetInteger(0, panelName+"_BG", OBJPROP_YSIZE, isCollapsed ? panelHeightCollapsed : panelHeightExpanded);
-   int y = panelY + 10;
-   int lineHeight = PANEL_LINE_HEIGHT;
-   string priceFormat = "%." + IntegerToString(symbolDigits) + "f";
-   string title = "═══ " + currentSymbol + " (" + symbolType + ") PRO ═══";
-   CreateLabel(panelName+"_Title", title, panelX + 10, y, clrYellow, 11);
-   if(isCollapsed)
-   {
-      string shortInfo = "";
-      color shortColor = clrGray;
-      if(resultH1.weightedSum >= SIGNAL_STRONG_THRESHOLD) { shortInfo = "▲ STRONG BUY"; shortColor = clrLime; }
-      else if(resultH1.weightedSum >= SIGNAL_WEAK_THRESHOLD) { shortInfo = "▲ BUY"; shortColor = clrGreen; }
-      else if(resultH1.weightedSum <= -SIGNAL_STRONG_THRESHOLD) { shortInfo = "▼ STRONG SELL"; shortColor = clrRed; }
-      else if(resultH1.weightedSum <= -SIGNAL_WEAK_THRESHOLD) { shortInfo = "▼ SELL"; shortColor = clrDarkRed; }
-      else { shortInfo = "● HOLD"; shortColor = clrGray; }
-      CreateLabel(panelName+"_ShortInfo", shortInfo, panelX + 250, y, shortColor, 10);
-      ClearTabContent();
-   }
-   else ShowAllDetails(y, lineHeight, priceFormat);
-   ChartRedraw();
-}
-
-void ClearTabContent()
-{
-   int total = ObjectsTotal(0);
-   for(int i = total - 1; i >= 0; i--)
-   {
-      string name = ObjectName(0, i);
-      if(StringFind(name, panelName) != 0) continue;
-      if(StringFind(name, "_BG") >= 0) continue;
-      if(StringFind(name, "_Title") >= 0) continue;
-      if(StringFind(name, "_ShortInfo") >= 0) continue;
-      if(StringFind(name, "_Tab_") >= 0) continue;
-      if(StringFind(name, "_Prev") >= 0) continue;
-      if(StringFind(name, "_Next") >= 0) continue;
-      if(name == buttonName) continue;
-      ObjectDelete(0, name);
-   }
-}
-
-void ShowAllDetails(int startY, int lineHeight, string priceFormat)
-{
-   ClearTabContent();
-   UpdateTabs();
-   int y = startY + 65;
-   CreateLabel(panelName+"_SubInfo", currentSession + " | " + DetectDayOfWeek() + " | " + TimeToString(TimeCurrent(), TIME_MINUTES|TIME_SECONDS), panelX + 10, y, clrLightGray, 9);
-   y += lineHeight;
-   CreateLabel(panelName+"_Sep0", "═══════════════════════════════════════════════════════", panelX + 10, y, clrDodgerBlue, 9);
-   y += lineHeight;
-   string pageInfo = StringFormat("📑 Стр. %d/%d: %s", currentTab + 1, TAB_COUNT, TAB_NAMES[currentTab]);
-   CreateLabel(panelName+"_PageInfo", pageInfo, panelX + 10, y, clrWheat, 9);
-   y += lineHeight + 3;
-   
-   switch(currentTab)
-   {
-      case 0: RenderTab_Analysis(y, lineHeight, priceFormat); break;
-      case 1: RenderTab_Filters(y, lineHeight); break;
-      case 2: RenderTab_Levels(y, lineHeight, priceFormat); break;
-      case 3: RenderTab_Stats(y, lineHeight); break;
-      case 4: RenderTab_History(y, lineHeight, priceFormat); break;
-   }
-}
-
-void RenderTab_Analysis(int y, int lineHeight, string priceFormat)
-{
-   CreateLabel(panelName+"_Col1", "ТФ", panelX + 20, y, clrDodgerBlue, 10);
-   CreateLabel(panelName+"_Col2", "СИГНАЛЫ", panelX + 80, y, clrDodgerBlue, 10);
-   CreateLabel(panelName+"_Col3", "Σ", panelX + 280, y, clrDodgerBlue, 10);
-   CreateLabel(panelName+"_Col4", "ПРОГНОЗ", panelX + 330, y, clrDodgerBlue, 10);
-   y += lineHeight + 3;
-   CreateLabel(panelName+"_Sep1", "─────────────────────────────────────────────────────────", panelX + 10, y, clrGray, 9);
-   y += lineHeight;
-   
-   DrawTFRow("H1", resultH1, "H1", y, priceFormat, lineHeight);
-   y += lineHeight * 3;
-   if(recEntryH1 > 0)
-   {
-      CreateLabel(panelName+"_LevelsH1", StringFormat("🟢 Entry: %s | SL: %s | TP: %s", DoubleToString(recEntryH1, symbolDigits), DoubleToString(recSLH1, symbolDigits), DoubleToString(recTPH1, symbolDigits)), panelX + 25, y, clrLime, 8);
-      y += lineHeight;
-   }
-   else { CreateLabel(panelName+"_LevelsH1", "🟢 H1: нет сигнала", panelX + 25, y, clrGray, 8); y += lineHeight; }
-   y += 5;
-   CreateLabel(panelName+"_Sep2", "─────────────────────────────────────────────────────────", panelX + 10, y, clrGray, 9);
-   y += lineHeight;
-   
-   DrawTFRow("H4", resultH4, "H4", y, priceFormat, lineHeight);
-   y += lineHeight * 3;
-   if(recEntryH4 > 0)
-   {
-      CreateLabel(panelName+"_LevelsH4", StringFormat("🟡 Entry: %s | SL: %s | TP: %s", DoubleToString(recEntryH4, symbolDigits), DoubleToString(recSLH4, symbolDigits), DoubleToString(recTPH4, symbolDigits)), panelX + 25, y, clrYellow, 8);
-      y += lineHeight;
-   }
-   else { CreateLabel(panelName+"_LevelsH4", "🟡 H4: нет сигнала", panelX + 25, y, clrGray, 8); y += lineHeight; }
-   y += 5;
-   CreateLabel(panelName+"_Sep3", "─────────────────────────────────────────────────────────", panelX + 10, y, clrGray, 9);
-   y += lineHeight;
-   
-   DrawTFRow("D1", resultD1, "D1", y, priceFormat, lineHeight);
-   y += lineHeight * 3;
-   if(recEntryD1 > 0)
-   {
-      CreateLabel(panelName+"_LevelsD1", StringFormat("🔴 Entry: %s | SL: %s | TP: %s", DoubleToString(recEntryD1, symbolDigits), DoubleToString(recSLD1, symbolDigits), DoubleToString(recTPD1, symbolDigits)), panelX + 25, y, clrOrangeRed, 8);
-      y += lineHeight;
-   }
-   else { CreateLabel(panelName+"_LevelsD1", "🔴 D1: нет сигнала", panelX + 25, y, clrGray, 8); y += lineHeight; }
-   y += 5;
-   CreateLabel(panelName+"_Sep4", "═══════════════════════════════════════════════════════", panelX + 10, y, clrDodgerBlue, 9);
-   y += lineHeight;
-   
-   string summary = "💡 ";
-   color sumColor = clrGray;
-   if(resultH1.weightedSum >= SIGNAL_STRONG_THRESHOLD && resultH4.weightedSum >= 2 && resultD1.weightedSum >= -4) { summary += "ВСЕ ТФ БЫЧЬИ — ищите BUY"; sumColor = clrLime; }
-   else if(resultH1.weightedSum <= -SIGNAL_STRONG_THRESHOLD && resultH4.weightedSum <= -2 && resultD1.weightedSum <= 4) { summary += "ВСЕ ТФ МЕДВЕЖЬИ — ищите SELL"; sumColor = clrRed; }
-   else if(MathAbs(resultH1.weightedSum) < SIGNAL_WEAK_THRESHOLD && MathAbs(resultH4.weightedSum) < SIGNAL_WEAK_THRESHOLD) { summary += "ФЛЭТ — ждём тренда"; sumColor = clrOrange; }
-   else { summary += "СМЕШАННЫЙ сигнал — осторожно"; sumColor = clrYellow; }
-   CreateLabel(panelName+"_Summary", summary, panelX + 20, y, sumColor, 10);
-}
-
-void RenderTab_Filters(int y, int lineHeight)
-{
-   string modesStr = "🎛️ Режимы: ";
-   modesStr += UseSignalH1 ? "🟢H1 " : "⚫H1 ";
-   modesStr += UseSignalH4 ? "🟡H4 " : "⚫H4 ";
-   modesStr += UseSignalD1 ? "🔴D1 " : "⚫D1 ";
-   CreateLabel(panelName+"_Modes", modesStr, panelX + 10, y, clrWheat, 9);
-   y += lineHeight + 3;
-   CreateLabel(panelName+"_FilterTitle", "🛡️ ФИЛЬТРЫ ТОЧНОСТИ:", panelX + 10, y, clrYellow, 11);
-   y += lineHeight + 3;
-   DrawFilterRow("News", "📰 Новости (±30 мин)", filterNews, y); y += lineHeight;
-   DrawFilterRow("Vol", "📊 Волатильность (ATR)", filterVolatility, y); y += lineHeight;
-   DrawFilterRow("Sess", "🕐 Сессия (8-22)", filterSession, y); y += lineHeight;
-   DrawFilterRow("Cand", "🕯️ Свечной паттерн", filterCandle, y); y += lineHeight;
-   DrawFilterRow("RSI", "📈 RSI (не экстремум)", filterRSI, y); y += lineHeight;
-   DrawFilterRow("Str", "🧱 Структура (уровни)", filterStructure, y); y += lineHeight + 5;
-   CreateLabel(panelName+"_Sep5", "═══════════════════════════════════════════════════════", panelX + 10, y, clrDodgerBlue, 9);
-   y += lineHeight;
-   
-   bool allFilters = filterNews && filterVolatility && filterSession && filterCandle && filterRSI && filterStructure;
-   string confirmStatus = "";
-   color confirmColor = clrGray;
-   if(allFilters)
-   {
-      confirmStatus = (resultH1.weightedSum > 0) ? "🟢 CONFIRMED BUY 🔔" : "🔴 CONFIRMED SELL 🔔";
-      confirmColor = (resultH1.weightedSum > 0) ? clrLime : clrRed;
-   }
-   else
-   {
-      int passed = 0;
-      if(filterNews) passed++; if(filterVolatility) passed++; if(filterSession) passed++;
-      if(filterCandle) passed++; if(filterRSI) passed++; if(filterStructure) passed++;
-      confirmStatus = StringFormat("⏳ Фильтры: %d/6 пройдено", passed);
-      confirmColor = clrOrange;
-   }
-   CreateLabel(panelName+"_Confirm", confirmStatus, panelX + 20, y, confirmColor, 11);
-}
-
-void RenderTab_Levels(int y, int lineHeight, string priceFormat)
-{
-   CreateLabel(panelName+"_LevelsTitle", "📊 РЕКОМЕНДУЕМЫЕ УРОВНИ:", panelX + 10, y, clrYellow, 11);
-   y += lineHeight + 5;
-   if(recEntry > 0)
-   {
-      color activeColor = (activeMode == "H1") ? clrLime : (activeMode == "H4") ? clrYellow : clrOrangeRed;
-      string activePrefix = (activeMode == "H1") ? "🟢" : (activeMode == "H4") ? "🟡" : "🔴";
-      CreateLabel(panelName+"_Entry", StringFormat("%s ВХОД (%s): %s", activePrefix, recOrderType, DoubleToString(recEntry, symbolDigits)), panelX + 20, y, activeColor, 10);
-      y += lineHeight;
-      double slDist = MathAbs(recEntry - recSL);
-      string slPips = (resultH1.atrValue > 0) ? StringFormat(" (-%.1f ATR)", slDist / resultH1.atrValue) : "";
-      CreateLabel(panelName+"_SL", StringFormat("🛑 STOP LOSS: %s", DoubleToString(recSL, symbolDigits)) + slPips, panelX + 20, y, SLColor, 10);
-      y += lineHeight;
-      double tpDist = MathAbs(recTP - recEntry);
-      string rr = (slDist > 0) ? StringFormat(" (R:R 1:%.1f)", tpDist / slDist) : "";
-      CreateLabel(panelName+"_TP", StringFormat("🎯 TAKE PROFIT: %s", DoubleToString(recTP, symbolDigits)) + rr, panelX + 20, y, TPColor, 10);
-      y += lineHeight + 5;
-      double rrRatio = (slDist > 0) ? tpDist / slDist : 0;
-      color rrColor = (rrRatio >= 2.0) ? clrLime : (rrRatio >= 1.5) ? clrYellow : (rrRatio >= 1.0) ? clrOrange : clrRed;
-      string rrText = StringFormat("💰 Risk/Reward = 1:%.2f %s", rrRatio, rrRatio >= 2.0 ? "✅ ОТЛИЧНО" : (rrRatio >= 1.5 ? "✅ ХОРОШО" : (rrRatio >= 1.0 ? "⚠️ НОРМ" : "❌ ПЛОХО")));
-      CreateLabel(panelName+"_RR", rrText, panelX + 20, y, rrColor, 10);
-      y += lineHeight + 5;
-      CreateLabel(panelName+"_StructTitle", "🧱 Структурные уровни (H4):", panelX + 10, y, clrYellow, 10);
-      y += lineHeight;
-      if(nearestResistance > 0) { CreateLabel(panelName+"_Res", StringFormat("🔸 Сопротивление: %s", DoubleToString(nearestResistance, symbolDigits)), panelX + 20, y, clrOrange, 9); y += lineHeight; }
-      else { CreateLabel(panelName+"_Res", "🔸 Сопротивление: не найдено", panelX + 20, y, clrGray, 9); y += lineHeight; }
-      if(nearestSupport > 0) { CreateLabel(panelName+"_Sup", StringFormat("🔹 Поддержка: %s", DoubleToString(nearestSupport, symbolDigits)), panelX + 20, y, clrDeepSkyBlue, 9); y += lineHeight; }
-      else { CreateLabel(panelName+"_Sup", "🔹 Поддержка: не найдена", panelX + 20, y, clrGray, 9); y += lineHeight; }
-   }
-   else
-   {
-      CreateLabel(panelName+"_NoLevels", "⏸ Уровни появятся при подтверждении сигнала", panelX + 20, y, clrGray, 10);
-      y += lineHeight;
-      CreateLabel(panelName+"_Hint", "💡 Ждите подтверждения сигнала", panelX + 20, y, clrWheat, 9);
-      y += lineHeight + 5;
-   }
-}
-
-void RenderTab_Stats(int y, int lineHeight)
-{
-   CreateLabel(panelName+"_StatTitle", "📈 СТАТИСТИКА ТОЧНОСТИ:", panelX + 10, y, clrYellow, 11);
-   y += lineHeight + 5;
-   CreateLabel(panelName+"_StatDate", "📅 Сбор начат: " + TimeToString(statsStartDate, TIME_DATE), panelX + 20, y, clrGray, 9);
-   y += lineHeight;
-   CreateLabel(panelName+"_Stat1", StringFormat("📊 Всего сигналов: %d", totalSignals), panelX + 20, y, clrLightGray, 10);
-   y += lineHeight;
-   CreateLabel(panelName+"_Stat2", StringFormat("✅ Верных: %d", winningSignals), panelX + 20, y, clrLime, 10);
-   y += lineHeight;
-   CreateLabel(panelName+"_Stat3", StringFormat("❌ Ошибок: %d", losingSignals), panelX + 20, y, clrRed, 10);
-   y += lineHeight;
-   CreateLabel(panelName+"_Stat4", StringFormat("⏸ Аннулировано: %d", canceledSignals), panelX + 20, y, clrGray, 10);
-   y += lineHeight + 5;
-   CreateLabel(panelName+"_Sep6", "═══════════════════════════════════════════════════════", panelX + 10, y, clrDodgerBlue, 9);
-   y += lineHeight + 3;
-   
-   double accuracy = GetAccuracy();
-   color accColor = (accuracy >= 70) ? clrLime : (accuracy >= 55) ? clrOrange : (totalSignals > 0 ? clrRed : clrGray);
-   CreateLabel(panelName+"_Acc", StringFormat("🎯 ТОЧНОСТЬ: %.1f%%", accuracy), panelX + 20, y, accColor, 14);
-   y += lineHeight + 5;
-   
-   string gradeStr = "";
-   color gradeColor = clrGray;
-   if(totalSignals == 0) { gradeStr = "⏳ Нет данных"; }
-   else if(accuracy >= ACCURACY_EXCELLENT) { gradeStr = "🏆 ОТЛИЧНО"; gradeColor = clrLime; }
-   else if(accuracy >= ACCURACY_GOOD) { gradeStr = "✅ ХОРОШО"; gradeColor = clrGreen; }
-   else if(accuracy >= ACCURACY_NORMAL) { gradeStr = "⚠️ НОРМАЛЬНО"; gradeColor = clrOrange; }
-   else { gradeStr = "❗ ТРЕБУЕТ НАСТРОЙКИ"; gradeColor = clrRed; }
-   CreateLabel(panelName+"_Grade", gradeStr, panelX + 20, y, gradeColor, 11);
-   y += lineHeight + 10;
-   
-   string resetBtn = panelName+"_Reset";
-   if(ObjectFind(0, resetBtn) >= 0) ObjectDelete(0, resetBtn);
-   ObjectCreate(0, resetBtn, OBJ_BUTTON, 0, 0, 0);
-   ObjectSetInteger(0, resetBtn, OBJPROP_XDISTANCE, panelX + panelWidth - 110);
-   ObjectSetInteger(0, resetBtn, OBJPROP_YDISTANCE, y);
-   ObjectSetInteger(0, resetBtn, OBJPROP_XSIZE, 100);
-   ObjectSetInteger(0, resetBtn, OBJPROP_YSIZE, 26);
-   ObjectSetString(0, resetBtn, OBJPROP_TEXT, "🗑️ RESET");
-   ObjectSetInteger(0, resetBtn, OBJPROP_COLOR, clrWhite);
-   ObjectSetInteger(0, resetBtn, OBJPROP_BGCOLOR, C'140,40,40');
-   ObjectSetInteger(0, resetBtn, OBJPROP_BORDER_COLOR, C'180,60,60');
-   ObjectSetString(0, resetBtn, OBJPROP_FONT, "Arial Bold");
-   ObjectSetInteger(0, resetBtn, OBJPROP_FONTSIZE, 10);
-   ObjectSetInteger(0, resetBtn, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, resetBtn, OBJPROP_HIDDEN, true);
-   ObjectSetInteger(0, resetBtn, OBJPROP_STATE, false);
-   
-   y += 35;
-   string testBtn = panelName+"_Backtest";
-   if(ObjectFind(0, testBtn) >= 0) ObjectDelete(0, testBtn);
-   ObjectCreate(0, testBtn, OBJ_BUTTON, 0, 0, 0);
-   ObjectSetInteger(0, testBtn, OBJPROP_XDISTANCE, panelX + 20);
-   ObjectSetInteger(0, testBtn, OBJPROP_YDISTANCE, y);
-   ObjectSetInteger(0, testBtn, OBJPROP_XSIZE, panelWidth - 40);
-   ObjectSetInteger(0, testBtn, OBJPROP_YSIZE, 30);
-   ObjectSetString(0, testBtn, OBJPROP_TEXT, isBacktestRunning ? "⏳ ТЕСТ ЗАПУЩЕН..." : "🧪 ЗАПУСТИТЬ БЭКТЕСТ");
-   ObjectSetInteger(0, testBtn, OBJPROP_COLOR, clrWhite);
-   ObjectSetInteger(0, testBtn, OBJPROP_BGCOLOR, isBacktestRunning ? C'100,100,50' : C'40,100,40');
-   ObjectSetInteger(0, testBtn, OBJPROP_BORDER_COLOR, C'80,150,80');
-   ObjectSetString(0, testBtn, OBJPROP_FONT, "Arial Bold");
-   ObjectSetInteger(0, testBtn, OBJPROP_FONTSIZE, 10);
-   ObjectSetInteger(0, testBtn, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, testBtn, OBJPROP_HIDDEN, true);
-   ObjectSetInteger(0, testBtn, OBJPROP_STATE, false);
-}
-
-void RenderTab_History(int y, int lineHeight, string priceFormat)
-{
-   CreateLabel(panelName+"_HistTitle", "📜 ИСТОРИЯ ПОСЛЕДНИХ СИГНАЛОВ:", panelX + 10, y, clrYellow, 11);
-   y += lineHeight + 3;
-   CreateLabel(panelName+"_HistH1", "ВРЕМЯ", panelX + 15, y, clrDodgerBlue, 9);
-   CreateLabel(panelName+"_HistH2", "ТФ", panelX + 110, y, clrDodgerBlue, 9);
-   CreateLabel(panelName+"_HistH3", "НАПР", panelX + 145, y, clrDodgerBlue, 9);
-   CreateLabel(panelName+"_HistH4", "ВХОД", panelX + 190, y, clrDodgerBlue, 9);
-   CreateLabel(panelName+"_HistH5", "СТАТУС", panelX + 290, y, clrDodgerBlue, 9);
-   y += lineHeight;
-   CreateLabel(panelName+"_HistSep", "─────────────────────────────────────────────────────────", panelX + 10, y, clrGray, 9);
-   y += lineHeight;
-   
-   int realCount = 0;
-   for(int i = 0; i < HISTORY_SIZE; i++) if(history[i].time > 0) realCount++;
-   if(realCount == 0)
-   {
-      CreateLabel(panelName+"_HistEmpty", "⏸ История пуста — ждём первый сигнал", panelX + 20, y, clrGray, 10);
-      return;
-   }
-   
-   for(int i = HISTORY_SIZE - 1; i >= 0; i--)
-   {
-      if(history[i].time == 0) continue;
-      string timeStr = TimeToString(history[i].time, TIME_DATE|TIME_MINUTES);
-      StringSetCharacter(timeStr, 4, '-');
-      StringSetCharacter(timeStr, 7, '-');
-      CreateLabel(panelName+"_HistT_"+IntegerToString(i), timeStr, panelX + 15, y, clrLightGray, 8);
-      color modeColor = (history[i].mode == "H1") ? clrLime : (history[i].mode == "H4") ? clrYellow : clrOrangeRed;
-      CreateLabel(panelName+"_HistM_"+IntegerToString(i), history[i].mode, panelX + 115, y, modeColor, 9);
-      color dirColor = (history[i].direction == "BUY") ? clrLime : clrRed;
-      CreateLabel(panelName+"_HistD_"+IntegerToString(i), (history[i].direction == "BUY") ? "▲ BUY" : "▼ SELL", panelX + 145, y, dirColor, 8);
-      CreateLabel(panelName+"_HistE_"+IntegerToString(i), DoubleToString(history[i].entry, symbolDigits), panelX + 190, y, clrWhite, 8);
-      color statusColor = (StringFind(history[i].status, "WIN") >= 0) ? clrLime : (StringFind(history[i].status, "LOSS") >= 0) ? clrRed : clrOrange;
-      CreateLabel(panelName+"_HistS_"+IntegerToString(i), history[i].status, panelX + 285, y, statusColor, 8);
-      y += lineHeight - 2;
-   }
-}
-
-void DrawFilterRow(string id, string label, bool passed, int y)
-{
-   CreateLabel(panelName+"_F_"+id, (passed ? "✅ " : "❌ ") + label, panelX + 25, y, passed ? clrLime : clrRed, 10);
-}
-
-void DrawTFRow(string tfLabel, IndicatorVotes &result, string prefix, int y, string priceFormat, int lineHeight)
-{
-   CreateLabel(panelName+"_TF_"+prefix, tfLabel, panelX + 25, y, clrWhite, 11);
-   int xSignals = panelX + 80;
-   for(int i = 0; i < 10; i++)
-   {
-      color c = (result.votes[i] > 0) ? clrLime : (result.votes[i] < 0) ? clrRed : clrGray;
-      string s = (result.votes[i] > 0) ? "▲" : (result.votes[i] < 0) ? "▼" : "●";
-      CreateLabel(panelName+"_"+prefix+"_"+IntegerToString(i), s, xSignals + i*16, y, c, 10);
-   }
-   color sumColor = (result.weightedSum > 0) ? clrLime : (result.weightedSum < 0) ? clrRed : clrGray;
-   CreateLabel(panelName+"_Sum"+prefix, StringFormat("%+.1f", result.weightedSum), panelX + 285, y, sumColor, 11);
-   color sigColor = GetSignalColor(result.signal);
-   CreateLabel(panelName+"_Signal"+prefix, result.signal, panelX + 330, y, sigColor, 10);
-   y += lineHeight;
-   CreateLabel(panelName+"_Forecast"+prefix, StringFormat("%d свечей", result.candlesForecast), panelX + 330, y, clrOrange, 9);
-   y += lineHeight;
-   string priceStr = StringFormat(priceFormat + " → " + priceFormat, result.currentPrice, result.targetPrice);
-   color priceColor = (result.targetPrice > result.currentPrice) ? clrLime : (result.targetPrice < result.currentPrice) ? clrRed : clrGray;
-   CreateLabel(panelName+"_Price"+prefix, priceStr, panelX + 80, y, priceColor, 9);
-}
-
-color GetSignalColor(string signal)
-{
-   if(signal == "STRONG BUY") return clrLime;
-   if(signal == "BUY") return clrGreen;
-   if(signal == "STRONG SELL") return clrRed;
-   if(signal == "SELL") return clrDarkRed;
-   return clrGray;
-}
-
-void CreateLabel(string name, string text, int x, int y, color clr, int fontSize)
-{
-   if(ObjectFind(0, name) < 0)
-   {
-      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
-   }
-   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
-   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
-   ObjectSetString(0, name, OBJPROP_TEXT, text);
-   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
-   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fontSize);
-   ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
-}
-
-

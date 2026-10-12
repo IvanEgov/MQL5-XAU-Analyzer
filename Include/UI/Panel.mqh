@@ -8,16 +8,44 @@
 #include <Config.mqh>
 #include <DataStructures.mqh>
 
-//--- Глобальные переменные состояния UI (доступны главному файлу)
+//--- Состояние UI
 int currentTab = 0;
 bool isCollapsed = false;
 
+//--- Данные для отрисовки (заполняются главным файлом)
+IndicatorVotes g_resultH1;
+IndicatorVotes g_resultH4;
+IndicatorVotes g_resultD1;
+string g_currentSymbol;
+double g_symbolPoint;
+
 //+------------------------------------------------------------------+
-//| Создать основную панель и кнопку сворачивания                    |
+//| Создание текстовой метки (ОБЩАЯ для всех вкладок)                |
+//+------------------------------------------------------------------+
+void UI_CreateLabel(string name, int x, int y, string text, color clr, int fontSize, bool bold)
+{
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+      
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetString (0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fontSize);
+   ObjectSetString (0, name, OBJPROP_FONT, bold ? "Arial Bold" : "Arial");
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+}
+
+//--- Подключаем модули вкладок ПОСЛЕ объявления общих функций
+#include <UI/TabAnalysis.mqh>
+
+//+------------------------------------------------------------------+
+//| Создать основную панель                                          |
 //+------------------------------------------------------------------+
 void UI_CreateBasePanel()
 {
-   // Фон панели
    ObjectCreate(0, PANEL_NAME, OBJ_RECTANGLE_LABEL, 0, 0, 0);
    ObjectSetInteger(0, PANEL_NAME, OBJPROP_XDISTANCE, PANEL_X);
    ObjectSetInteger(0, PANEL_NAME, OBJPROP_YDISTANCE, PANEL_Y);
@@ -31,7 +59,6 @@ void UI_CreateBasePanel()
    ObjectSetInteger(0, PANEL_NAME, OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0, PANEL_NAME, OBJPROP_HIDDEN, true);
 
-   // Кнопка сворачивания/разворачивания
    string btnName = PANEL_NAME + "_CollapseBtn";
    ObjectCreate(0, btnName, OBJ_BUTTON, 0, 0, 0);
    ObjectSetInteger(0, btnName, OBJPROP_XDISTANCE, PANEL_X + PANEL_WIDTH - 30);
@@ -47,7 +74,7 @@ void UI_CreateBasePanel()
 }
 
 //+------------------------------------------------------------------+
-//| Создать вкладки (заглушка для детальной реализации)              |
+//| Создать вкладки и отрисовать текущую                             |
 //+------------------------------------------------------------------+
 void UI_CreateTabs()
 {
@@ -72,7 +99,20 @@ void UI_CreateTabs()
       ObjectSetInteger(0, tabName, OBJPROP_HIDDEN, true);
    }
    
-   // Здесь позже вызовем UI_UpdateTabContent(currentTab);
+   UI_DrawCurrentTab();
+}
+
+//+------------------------------------------------------------------+
+//| Диспетчер отрисовки вкладок                                      |
+//+------------------------------------------------------------------+
+void UI_DrawCurrentTab()
+{
+   if(currentTab == 0)
+      UI_DrawTabAnalysis(g_resultH1, g_resultH4, g_resultD1, g_currentSymbol, g_symbolPoint);
+   // else if(currentTab == 1) UI_DrawTabFilters();
+   // else if(currentTab == 2) UI_DrawTabLevels();
+   // else if(currentTab == 3) UI_DrawTabStats();
+   // else if(currentTab == 4) UI_DrawTabHistory();
 }
 
 //+------------------------------------------------------------------+
@@ -80,29 +120,25 @@ void UI_CreateTabs()
 //+------------------------------------------------------------------+
 void UI_DeleteAll()
 {
-   // Удаляем кнопку сворачивания
    ObjectDelete(0, PANEL_NAME + "_CollapseBtn");
    
-   // Удаляем вкладки
    for(int i = 0; i < TAB_COUNT; i++)
    {
       ObjectDelete(0, PANEL_NAME + "_Tab_" + IntegerToString(i));
    }
    
-   // Удаляем содержимое вкладок (будет расширено)
    UI_DeleteTabContent(0);
    UI_DeleteTabContent(1);
    UI_DeleteTabContent(2);
    UI_DeleteTabContent(3);
    UI_DeleteTabContent(4);
    
-   // Удаляем фон панели
    ObjectDelete(0, PANEL_NAME);
    ChartRedraw();
 }
 
 //+------------------------------------------------------------------+
-//| Очистка содержимого конкретной вкладки                           |
+//| Очистка содержимого вкладки                                      |
 //+------------------------------------------------------------------+
 void UI_DeleteTabContent(int tabIdx)
 {
@@ -113,21 +149,16 @@ void UI_DeleteTabContent(int tabIdx)
       string name = ObjectName(0, i, 0, OBJ_LABEL);
       if(StringFind(name, prefix) == 0)
          ObjectDelete(0, name);
-         
-      name = ObjectName(0, i, 0, OBJ_RECTANGLE_LABEL);
-      if(StringFind(name, prefix) == 0)
-         ObjectDelete(0, name);
    }
 }
 
 //+------------------------------------------------------------------+
-//| Обработка кликов по элементам UI (вызывать из OnChartEvent)      |
+//| Обработка кликов                                                 |
 //+------------------------------------------------------------------+
 bool UI_OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
    if(id == CHARTEVENT_OBJECT_CLICK)
    {
-      // Клик по кнопке сворачивания
       if(sparam == PANEL_NAME + "_CollapseBtn")
       {
          isCollapsed = !isCollapsed;
@@ -139,7 +170,6 @@ bool UI_OnChartEvent(const int id, const long &lparam, const double &dparam, con
          return true;
       }
       
-      // Клик по вкладкам
       for(int i = 0; i < TAB_COUNT; i++)
       {
          if(sparam == PANEL_NAME + "_Tab_" + IntegerToString(i))
@@ -147,10 +177,9 @@ bool UI_OnChartEvent(const int id, const long &lparam, const double &dparam, con
             if(currentTab != i)
             {
                currentTab = i;
-               UI_DeleteAll(); // Перерисовка всей панели для простоты
+               UI_DeleteAll();
                UI_CreateBasePanel();
                UI_CreateTabs();
-               // Здесь будет вызов UI_DrawTab(currentTab);
                ChartRedraw();
             }
             return true;
