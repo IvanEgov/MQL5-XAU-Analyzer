@@ -11,7 +11,7 @@
 #include <SignalManager.mqh>
 #include <Storage.mqh>
 #include <Executor.mqh>      // ← СЛОЙ 7: ИСПОЛНИТЕЛЬ
-#include <Backtester.mqh>  
+
 #include <UI/Panel.mqh>
 
 //--- Глобальные параметры (оптимизируемые из input)
@@ -130,6 +130,9 @@ input int    OptEMAStep        = 10;     // EMA период: ШАГ
 input int    OptRSIMin         = 7;      // RSI период: МИН
 input int    OptRSIMax         = 21;     // RSI период: МАКС
 input int    OptRSIStep        = 2;      // RSI период: ШАГ
+#include <Backtester.mqh>
+
+
 //+------------------------------------------------------------------+
 int OnInit()
 {
