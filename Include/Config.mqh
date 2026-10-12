@@ -26,10 +26,10 @@ const double IND_WEIGHTS[10] = {
 //+------------------------------------------------------------------+
 //| ПОРОГИ СИГНАЛОВ                                                  |
 //+------------------------------------------------------------------+
-const double SIGNAL_THRESHOLD_MIN      = 4.0;   // Минимальный порог для сигнала
-const double SIGNAL_THRESHOLD_DEFAULT  = 6.0;   // Порог по умолчанию
-const double SIGNAL_STRONG_THRESHOLD   = 6.0;   // Порог "STRONG" сигнала
-const double SIGNAL_WEAK_THRESHOLD     = 3.0;   // Порог слабого сигнала
+const double SIGNAL_THRESHOLD_MIN      = 2.0;   // Минимальный порог для сигнала
+const double SIGNAL_THRESHOLD_DEFAULT  = 4.0;   // Порог по умолчанию
+const double SIGNAL_STRONG_THRESHOLD   = 5.0;   // Порог "STRONG" сигнала
+const double SIGNAL_WEAK_THRESHOLD     = 2.0;   // Порог слабого сигнала
 
 //+------------------------------------------------------------------+
 //| ФИЛЬТР RSI                                                       |

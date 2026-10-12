@@ -60,6 +60,12 @@ input int    NewsMinutesAfter  = 30;
 input bool   UsePushNotify     = true;
 input int    ResultCheckDelay  = 60;
 
+//=== ЧУВСТВИТЕЛЬНОСТЬ СИГНАЛОВ ===
+input group "══════ ЧУВСТВИТЕЛЬНОСТЬ СИГНАЛОВ ══════"
+input int    MinBarsBetweenSignals = 4;   // Минимум часов между сигналами одного ТФ
+input bool   AllowRepeatSignals    = true; // Разрешить повторные сигналы (BUY после BUY)
+input int    BacktestStepBars      = 1;   // Шаг проверки в бэктесте (1=каждый бар, 4=каждый 4-й)
+
 //=== ОТКЛЮЧАЕМЫЕ ФИЛЬТРЫ ===
 input group "══════ ФИЛЬТРЫ (включайте/выключайте) ══════"
 input bool   FilterLag         = true;
@@ -668,10 +674,28 @@ void Analyze()
    }
    
    //=== СОЗДАНИЕ НОВЫХ СИГНАЛОВ ТОЛЬКО ПРИ НОВОЙ СВЕЧЕ ===
-   if(UseSignalH1 && newBarH1 && (lastEntryPrice == 0 || signalChecked))
+      if(UseSignalH1 && newBarH1 && (lastEntryPrice == 0 || signalChecked))
    {
       string sigH1 = CheckEntryForTF(PERIOD_H1, resultH1, hRSI_H1, "H1");
-      if(sigH1 != "" && sigH1 != lastSignalH1)
+      
+      // Проверка интервала между сигналами
+      bool canPlaceH1 = false;
+      if(sigH1 != "")
+      {
+         if(AllowRepeatSignals)
+         {
+            // Разрешаем повторные, но с интервалом
+            datetime timeSinceLast = TimeCurrent() - lastSignalCheckTime;
+            canPlaceH1 = (timeSinceLast >= MinBarsBetweenSignals * 3600) || (lastSignalCheckTime == 0);
+         }
+         else
+         {
+            // Старая логика — запрет повторов
+            canPlaceH1 = (sigH1 != lastSignalH1);
+         }
+      }
+      
+      if(canPlaceH1)
       {
          lastSignalH1 = sigH1;
          lastSignalStrengthH1 = resultH1.weightedSum;
