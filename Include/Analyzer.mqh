@@ -1,15 +1,16 @@
 //+------------------------------------------------------------------+
 //| Analyzer.mqh                                                     |
-//| СЛОЙ 3: ЯДРО АНАЛИЗА (10 индикаторов + конфлюэнс + ADX фильтр)   |
+//| СЛОЙ 3: 10 ИНДИКАТОРОВ + МЯГКИЙ ФИЛЬТР УРОВНЕЙ                   |
 //+------------------------------------------------------------------+
 #ifndef ANALYZER_MQH
 #define ANALYZER_MQH
 
 #include <Config.mqh>
 #include <DataStructures.mqh>
+#include <Levels.mqh>
 
 //+------------------------------------------------------------------+
-//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА ТАЙМФРЕЙМА (РАБОЧАЯ ВЕРСИЯ)               |
+//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА (ИНДИКАТОРЫ + МЯГКИЙ ФИЛЬТР УРОВНЕЙ)      |
 //+------------------------------------------------------------------+
 IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
                              int hEMA50, int hEMA200, int hMACD, int hADX, int hRSI,
@@ -59,7 +60,7 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    if(CopyBuffer(hBB, 2, shift, 3, bbLow) < 3) return result;
    if(CopyBuffer(hATR, 0, shift, 3, atr) < 3) return result;
 
-   //=== 3. РАСЧЁТ ГОЛОСОВ (ПРОФЕССИОНАЛЬНАЯ ЛОГИКА) ===
+   //=== 3. РАСЧЁТ ГОЛОСОВ (10 ИНДИКАТОРОВ) ===
    int votes[10];
    int bullVotes = 0, bearVotes = 0;
 
@@ -127,18 +128,40 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
       weightedSum *= 0.5;
    }
 
+   //=== 6. 🆕 МЯГКИЙ ФИЛЬТР УРОВНЕЙ (бонус/штраф) ===
+   double currentPrice = close[1];
+   double levelZoneATR = 0.5; // Широкая зона — 0.5 ATR
+   
+   bool nearSupport = Levels_IsNearLevel(currentPrice, "SUPPORT", levelZoneATR);
+   bool nearResistance = Levels_IsNearLevel(currentPrice, "RESISTANCE", levelZoneATR);
+   
+   // Бонус за совпадение направления с уровнем
+   if(weightedSum > 0 && nearSupport) {
+      weightedSum += 1.5; // BUY у поддержки = бонус
+   }
+   else if(weightedSum < 0 && nearResistance) {
+      weightedSum -= 1.5; // SELL у сопротивления = бонус
+   }
+   // Штраф за торговлю против уровня
+   else if(weightedSum > 0 && nearResistance) {
+      weightedSum -= 1.0; // BUY у сопротивления = штраф
+   }
+   else if(weightedSum < 0 && nearSupport) {
+      weightedSum += 1.0; // SELL у поддержки = штраф
+   }
+
    result.weightedSum = weightedSum;
    result.totalSum = (int)weightedSum;
    for(int i = 0; i < 10; i++) result.votes[i] = votes[i];
 
-   //=== 6. ОПРЕДЕЛЕНИЕ СИГНАЛА ===
+   //=== 7. ОПРЕДЕЛЕНИЕ СИГНАЛА ===
    if(weightedSum >= params.signalThreshold) result.signal = "STRONG BUY";
    else if(weightedSum >= SIGNAL_WEAK_THRESHOLD) result.signal = "BUY";
    else if(weightedSum <= -params.signalThreshold) result.signal = "STRONG SELL";
    else if(weightedSum <= -SIGNAL_WEAK_THRESHOLD) result.signal = "SELL";
    else result.signal = "HOLD";
 
-   //=== 7. РАСЧЁТ ATR И ПРОГНОЗА ===
+   //=== 8. РАСЧЁТ ATR И ПРОГНОЗА ===
    result.atrValue = atr[1];
    result.currentPrice = close[1];
    
@@ -154,7 +177,7 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    int maxC = (tf == PERIOD_H1) ? MAX_CANDLES_H1 : (tf == PERIOD_H4) ? MAX_CANDLES_H4 : MAX_CANDLES_D1;
    result.candlesForecast = MathMax(minC, MathMin(maxC, baseCandles));
 
-   //=== 8. РАСЧЁТ ЦЕЛЕВОЙ ЦЕНЫ ===
+   //=== 9. РАСЧЁТ ЦЕЛЕВОЙ ЦЕНЫ ===
    double multiplier = 0;
    if(tf == PERIOD_H1) multiplier = TP_MULT_H1_BASE + (result.candlesForecast * TP_MULT_H1_STEP);
    else if(tf == PERIOD_H4) multiplier = TP_MULT_H4_BASE + (result.candlesForecast * TP_MULT_H4_STEP);
