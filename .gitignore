@@ -31,7 +31,7 @@
 !/Include/VirtualKeys.mqh
 !/Include/Levels.mqh
 !/Include/UI/
-
+!/Include/GlobalVars.mqh
 # 5. Files — только заглушка, данные генерируются советником
 /Files/*
 !/Files/.gitkeep
