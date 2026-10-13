@@ -7,34 +7,22 @@
 
 #include <Config.mqh>
 #include <DataStructures.mqh>
-
+/*
 // =========================================================================
-// ССЫЛКИ НА ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ИЗ ГЛАВНОГО ФАЙЛА / SignalManager.mqh
-// (Это устраняет ошибки "undeclared identifier" во всех вкладках)
+// ССЫЛКИ НА ПЕРЕМЕННЫЕ ИЗ GlobalVars.mqh
 // =========================================================================
-extern bool filterNews;
-extern bool filterVolatility;
-extern bool filterSession;
-extern bool filterCandle;
-extern bool filterRSI;
-extern bool filterStructure;
-
-//extern SignalRecord history[];       // <-- ЭТОГО НЕ ХВАТАЛО (решает 100 ошибок)
-extern int totalSignals;
-extern int winningSignals;
-extern int losingSignals;
-extern int canceledSignals;
+extern bool filterNews, filterVolatility, filterSession;
+extern bool filterCandle, filterRSI, filterStructure;
+extern SignalRecord history[];
+extern int totalSignals, winningSignals, losingSignals, canceledSignals;
 extern datetime statsStartDate;
 extern int symbolDigits;
-
-extern double recEntry;
-extern double recSL;
-extern double recTP;
-extern string recOrderType;
-extern string activeMode;
-extern double nearestResistance;
-extern double nearestSupport;
-extern bool isBacktestRunning;
+extern double recEntry, recSL, recTP;
+extern string recOrderType, activeMode;
+extern double nearestResistance, nearestSupport;
+extern double recEntryH1, recSLH1, recTPH1, recEntryH4, recSLH4, recTPH4, recEntryD1, recSLD1, recTPD1;
+extern string recOrderTypeH1, recOrderTypeH4, recOrderTypeD1;
+extern bool isBacktestRunning;*/
 // =========================================================================
 
 //--- Состояние UI

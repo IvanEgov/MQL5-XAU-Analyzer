@@ -7,18 +7,23 @@
 
 #include <Config.mqh>
 #include <DataStructures.mqh>
-
-extern IndicatorParams optParams;
-extern int hEMA50_H1, hEMA200_H1, hMACD_H1, hADX_H1, hRSI_H1;
-extern int hStoch_H1, hCCI_H1, hVol_H1, hOBV_H1, hBB_H1, hATR_H1;
-extern int hEMA50_H4, hEMA200_H4, hMACD_H4, hADX_H4, hRSI_H4;
-extern int hStoch_H4, hCCI_H4, hVol_H4, hOBV_H4, hBB_H4, hATR_H4;
-extern int hEMA50_D1, hEMA200_D1, hMACD_D1, hADX_D1, hRSI_D1;
-extern int hStoch_D1, hCCI_D1, hVol_D1, hOBV_D1, hBB_D1, hATR_D1;
-extern bool isBacktestRunning;
-extern string currentSymbol;
+/*
+// =========================================================================
+// ССЫЛКИ НА ПЕРЕМЕННЫЕ ИЗ GlobalVars.mqh
+// =========================================================================
+extern bool filterNews, filterVolatility, filterSession;
+extern bool filterCandle, filterRSI, filterStructure;
+extern SignalRecord history[];
+extern int totalSignals, winningSignals, losingSignals, canceledSignals;
+extern datetime statsStartDate;
 extern int symbolDigits;
-
+extern double recEntry, recSL, recTP;
+extern string recOrderType, activeMode;
+extern double nearestResistance, nearestSupport;
+extern double recEntryH1, recSLH1, recTPH1, recEntryH4, recSLH4, recTPH4, recEntryD1, recSLD1, recTPD1;
+extern string recOrderTypeH1, recOrderTypeH4, recOrderTypeD1;
+extern bool isBacktestRunning;*/
+// =========================================================================
 //+------------------------------------------------------------------+
 //| БЭКТЕСТ (РАБОЧАЯ ВЕРСИЯ)                                         |
 //+------------------------------------------------------------------+
