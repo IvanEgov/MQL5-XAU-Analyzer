@@ -77,6 +77,15 @@ input bool   FilterSession     = true;
 input bool   FilterVolatility  = true;
 input bool   FilterNews        = true;
 
+//=== НАСТРОЙКИ УРОВНЕЙ ===
+input group "══════ НАСТРОЙКИ УРОВНЕЙ ══════"
+input int    LevelsLookbackH1   = 120;    // H1: баров для поиска (120 = 5 дней)
+input int    LevelsLookbackH4   = 60;     // H4: баров для поиска (60 = 10 дней)
+input int    LevelsMinStrength  = 3;      // Мин. касаний для отображения (3-5)
+input double LevelsZoneATR      = 0.3;    // Ширина зоны уровня (в ATR)
+input double LevelsMergeATR     = 0.3;    // Зона объединения близких уровней
+input double LevelsConflictATR  = 0.5;    // Зона конфликта S/R (удаляем слабый)
+
 //=== РЕЖИМЫ СИГНАЛОВ ===
 input bool   UseSignalH1       = true;
 input bool   UseSignalH4       = true;

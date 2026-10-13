@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| Levels.mqh                                                       |
-//| СЛОЙ 5: ПОИСК И ОТРИСОВКА УРОВНЕЙ ЗОНАМИ (прямоугольники)       |
+//| СЛОЙ 5: ПОИСК И ОТРИСОВКА УРОВНЕЙ ЗОНАМИ (с фильтрацией)         |
 //+------------------------------------------------------------------+
 #ifndef LEVELS_MQH
 #define LEVELS_MQH
@@ -12,13 +12,21 @@
 extern int hATR_H1;
 extern int hATR_H4;
 
+//--- Настраиваемые параметры (из главного файла)
+extern int LevelsLookbackH1;
+extern int LevelsLookbackH4;
+extern int LevelsMinStrength;
+extern double LevelsZoneATR;
+extern double LevelsMergeATR;
+extern double LevelsConflictATR;
+
 //--- Структура уровня
 struct PriceLevel {
    double price;
-   int strength;        // Сила уровня (1-5)
-   int touches;         // Количество касаний
-   ENUM_TIMEFRAMES tf;  // ТФ, на котором найден
-   datetime time;       // Время последнего касания
+   int strength;
+   int touches;
+   ENUM_TIMEFRAMES tf;
+   datetime time;
    string type;         // "SUPPORT" или "RESISTANCE"
 };
 
@@ -41,9 +49,9 @@ double Levels_GetATR(ENUM_TIMEFRAMES tf)
 }
 
 //+------------------------------------------------------------------+
-//| Поиск уровней методом свингов (Fractal-like)                     |
+//| Поиск уровней методом свингов                                    |
 //+------------------------------------------------------------------+
-void Levels_FindSwingLevels(ENUM_TIMEFRAMES tf, int lookback = 100)
+void Levels_FindSwingLevels(ENUM_TIMEFRAMES tf, int lookback)
 {
    double high[], low[];
    ArraySetAsSeries(high, true);
@@ -52,10 +60,10 @@ void Levels_FindSwingLevels(ENUM_TIMEFRAMES tf, int lookback = 100)
    if(CopyHigh(_Symbol, tf, 0, lookback, high) < lookback) return;
    if(CopyLow(_Symbol, tf, 0, lookback, low) < lookback) return;
    
-   int leftBars = 3;
-   int rightBars = 3;
+   int leftBars = 5;   // Увеличили с 3 до 5 для более значимых свингов
+   int rightBars = 5;
    
-   // Ищем свинг-хаи (сопротивление)
+   // Свинг-хаи (сопротивление)
    for(int i = leftBars; i < lookback - rightBars; i++) {
       bool isSwingHigh = true;
       for(int j = 1; j <= leftBars; j++) {
@@ -72,7 +80,7 @@ void Levels_FindSwingLevels(ENUM_TIMEFRAMES tf, int lookback = 100)
       }
    }
    
-   // Ищем свинг-лоу (поддержка)
+   // Свинг-лоу (поддержка)
    for(int i = leftBars; i < lookback - rightBars; i++) {
       bool isSwingLow = true;
       for(int j = 1; j <= leftBars; j++) {
@@ -91,27 +99,24 @@ void Levels_FindSwingLevels(ENUM_TIMEFRAMES tf, int lookback = 100)
 }
 
 //+------------------------------------------------------------------+
-//| Добавление уровня (с объединением близких)                       |
+//| Добавление уровня                                                |
 //+------------------------------------------------------------------+
 void Levels_AddLevel(double price, string type, ENUM_TIMEFRAMES tf, datetime time)
 {
    double atr = Levels_GetATR(tf);
-   if(atr <= 0) atr = 10.0; // fallback
-   double tolerance = atr * 0.3; // Зона 0.3 ATR для объединения
+   if(atr <= 0) atr = 10.0;
+   double tolerance = atr * LevelsMergeATR;
    
-   // Ищем существующий уровень рядом
    for(int i = 0; i < g_levelsCount; i++) {
       if(MathAbs(g_levels[i].price - price) < tolerance && g_levels[i].type == type) {
          g_levels[i].strength++;
          g_levels[i].touches++;
          if(time > g_levels[i].time) g_levels[i].time = time;
-         // Усредняем цену для большей точности
-         g_levels[i].price = (g_levels[i].price + price) / 2.0;
+         g_levels[i].price = (g_levels[i].price * (g_levels[i].touches - 1) + price) / g_levels[i].touches;
          return;
       }
    }
    
-   // Добавляем новый уровень
    g_levelsCount++;
    ArrayResize(g_levels, g_levelsCount);
    g_levels[g_levelsCount-1].price = price;
@@ -123,7 +128,59 @@ void Levels_AddLevel(double price, string type, ENUM_TIMEFRAMES tf, datetime tim
 }
 
 //+------------------------------------------------------------------+
-//| Найти ближайший уровень к текущей цене                           |
+//| ФИЛЬТРАЦИЯ: Удаление пересекающихся уровней                      |
+//+------------------------------------------------------------------+
+void Levels_FilterConflicts()
+{
+   double atr = Levels_GetATR(PERIOD_H1);
+   if(atr <= 0) return;
+   double conflictZone = atr * LevelsConflictATR;
+   
+   // Проходим по всем парам уровней
+   for(int i = 0; i < g_levelsCount; i++) {
+      for(int j = i + 1; j < g_levelsCount; j++) {
+         // Если уровни разных типов и пересекаются
+         if(g_levels[i].type != g_levels[j].type) {
+            double dist = MathAbs(g_levels[i].price - g_levels[j].price);
+            if(dist < conflictZone) {
+               // Это флэтовая зона — удаляем более слабый уровень
+               if(g_levels[i].strength < g_levels[j].strength) {
+                  // Удаляем i, сдвигая массив
+                  for(int k = i; k < g_levelsCount - 1; k++) {
+                     g_levels[k] = g_levels[k+1];
+                  }
+                  g_levelsCount--;
+                  ArrayResize(g_levels, g_levelsCount);
+                  i--; // Повторяем проверку с текущей позиции
+                  break;
+               } else {
+                  // Удаляем j
+                  for(int k = j; k < g_levelsCount - 1; k++) {
+                     g_levels[k] = g_levels[k+1];
+                  }
+                  g_levelsCount--;
+                  ArrayResize(g_levels, g_levelsCount);
+                  j--; // Повторяем проверку
+               }
+            }
+         }
+      }
+   }
+   
+   // Дополнительная фильтрация: удаляем слабые уровни
+   int newCount = 0;
+   for(int i = 0; i < g_levelsCount; i++) {
+      if(g_levels[i].strength >= LevelsMinStrength) {
+         if(newCount != i) g_levels[newCount] = g_levels[i];
+         newCount++;
+      }
+   }
+   g_levelsCount = newCount;
+   ArrayResize(g_levels, g_levelsCount);
+}
+
+//+------------------------------------------------------------------+
+//| Найти ближайший уровень                                          |
 //+------------------------------------------------------------------+
 int Levels_FindNearest(double currentPrice, string type, double maxDistanceATR = 2.0)
 {
@@ -148,7 +205,7 @@ int Levels_FindNearest(double currentPrice, string type, double maxDistanceATR =
 }
 
 //+------------------------------------------------------------------+
-//| Проверка: цена у уровня? (в зоне отскока)                        |
+//| Проверка: цена у уровня?                                         |
 //+------------------------------------------------------------------+
 bool Levels_IsNearLevel(double currentPrice, string type, double zoneATR = 0.3)
 {
@@ -158,7 +215,6 @@ bool Levels_IsNearLevel(double currentPrice, string type, double zoneATR = 0.3)
    
    for(int i = 0; i < g_levelsCount; i++) {
       if(g_levels[i].type != type) continue;
-      if(g_levels[i].strength < 2) continue; // Только уровни с 2+ касаниями
       
       if(MathAbs(g_levels[i].price - currentPrice) < zone) {
          return true;
@@ -168,7 +224,7 @@ bool Levels_IsNearLevel(double currentPrice, string type, double zoneATR = 0.3)
 }
 
 //+------------------------------------------------------------------+
-//| Отрисовка уровней ЗОНАМИ (прямоугольники)                        |
+//| Отрисовка уровней ЗОНАМИ                                         |
 //+------------------------------------------------------------------+
 void Levels_DrawOnChart()
 {
@@ -178,18 +234,14 @@ void Levels_DrawOnChart()
       if(StringFind(name, "LevelZone_") == 0) ObjectDelete(0, name);
    }
    
-   // Рисуем новые зоны (только сильные уровни)
    int drawn = 0;
-   datetime timeRight = TimeCurrent() + PeriodSeconds(PERIOD_H1) * 20; // +20 баров вправо
+   datetime timeRight = TimeCurrent() + PeriodSeconds(PERIOD_H1) * 30;
    
-   for(int i = 0; i < g_levelsCount && drawn < 15; i++) {
-      if(g_levels[i].strength < 2) continue; // Только уровни с 2+ касаниями
-      
+   for(int i = 0; i < g_levelsCount && drawn < 10; i++) {
       double atr = Levels_GetATR(g_levels[i].tf);
       if(atr <= 0) continue;
       
-      // Ширина зоны = 0.3 ATR в обе стороны от цены
-      double zoneHalf = atr * 0.3;
+      double zoneHalf = atr * LevelsZoneATR;
       double topPrice = g_levels[i].price + zoneHalf;
       double bottomPrice = g_levels[i].price - zoneHalf;
       
@@ -197,22 +249,23 @@ void Levels_DrawOnChart()
       
       string name = "LevelZone_" + IntegerToString(i);
       
-      // Цвет зависит от типа и силы
       color baseColor = (g_levels[i].type == "SUPPORT") ? clrDodgerBlue : clrOrangeRed;
       
-      // Прозрачность зависит от силы уровня (2 касания = 30%, 3 = 40%, 4+ = 50%)
-      int alpha = 40 + g_levels[i].strength * 10;
+      // Прозрачность от силы (3 касания = 30%, 4 = 40%, 5+ = 50%)
+      int alpha = 30 + (g_levels[i].strength - LevelsMinStrength) * 15;
+      if(alpha < 30) alpha = 30;
       if(alpha > 80) alpha = 80;
-      color zoneColor = ColorToARGB(baseColor, alpha);
+      
+      // ✅ ИСПРАВЛЕНО: явное приведение типов
+      color zoneColor = (color)ColorToARGB(baseColor, (uchar)alpha);
       
       ObjectCreate(0, name, OBJ_RECTANGLE, 0, timeLeft, topPrice, timeRight, bottomPrice);
       ObjectSetInteger(0, name, OBJPROP_COLOR, zoneColor);
-      ObjectSetInteger(0, name, OBJPROP_FILL, true); // Заливка цветом
-      ObjectSetInteger(0, name, OBJPROP_BACK, true); // Под свечами
+      ObjectSetInteger(0, name, OBJPROP_FILL, true);
+      ObjectSetInteger(0, name, OBJPROP_BACK, true);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       
-      // Тултип с информацией
       string tooltip = g_levels[i].type + " @ " + DoubleToString(g_levels[i].price, _Digits) +
                        " | Сила: " + IntegerToString(g_levels[i].strength) +
                        " | Касаний: " + IntegerToString(g_levels[i].touches) +
@@ -226,17 +279,20 @@ void Levels_DrawOnChart()
 }
 
 //+------------------------------------------------------------------+
-//| Инициализация: поиск уровней на H1 и H4                          |
+//| Инициализация                                                    |
 //+------------------------------------------------------------------+
 void Levels_Init()
 {
    g_levelsCount = 0;
    ArrayResize(g_levels, 0);
    
-   Levels_FindSwingLevels(PERIOD_H1, 200);
-   Levels_FindSwingLevels(PERIOD_H4, 100);
+   Levels_FindSwingLevels(PERIOD_H1, LevelsLookbackH1);
+   Levels_FindSwingLevels(PERIOD_H4, LevelsLookbackH4);
    
-   Print("📊 Найдено уровней: ", g_levelsCount);
+   int beforeFilter = g_levelsCount;
+   Levels_FilterConflicts();
+   
+   Print("📊 Найдено уровней: ", beforeFilter, " → после фильтрации: ", g_levelsCount);
    
    int support = 0, resistance = 0;
    for(int i = 0; i < g_levelsCount; i++) {
@@ -245,6 +301,7 @@ void Levels_Init()
    }
    Print("   • Поддержек: ", support);
    Print("   • Сопротивлений: ", resistance);
+   Print("   • Удалено конфликтов: ", beforeFilter - g_levelsCount);
 }
 
 #endif
