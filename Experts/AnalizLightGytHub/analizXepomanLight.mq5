@@ -12,15 +12,15 @@
 #include <Storage.mqh>
 #include <Executor.mqh>
 
-//--- Статусы фильтров (должны быть ОБЪЯВЛЕНЫ ДО UI/Panel.mqh!)
+/*//--- Статусы фильтров (должны быть ОБЪЯВЛЕНЫ ДО UI/Panel.mqh!)
 bool filterNews = true;
 bool filterVolatility = true;
 bool filterSession = true;
 bool filterCandle = true;
 bool filterRSI = true;
 bool filterStructure = true;
+*/
 
-#include <UI/Panel.mqh>
 #include <Levels.mqh>
 
 #include <UI/Panel.mqh>
@@ -76,6 +76,7 @@ input group "══════ ЧУВСТВИТЕЛЬНОСТЬ СИГНАЛО�
 input int    MinBarsBetweenSignals = 4;   // Минимум часов между сигналами одного ТФ
 input bool   AllowRepeatSignals    = true; // Разрешить повторные сигналы (BUY после BUY)
 input int    BacktestStepBars      = 1;   // Шаг проверки в бэктесте (1=каждый бар, 4=каждый 4-й)
+
 
 //=== ОТКЛЮЧАЕМЫЕ ФИЛЬТРЫ ===
 input group "══════ ФИЛЬТРЫ (включайте/выключайте) ══════"

@@ -1,5 +1,6 @@
 //+------------------------------------------------------------------+
 //| Panel.mqh                                                        |
+//| СЛОЙ 6: UI - Управление панелью и ВСЕМИ вкладками                |
 //+------------------------------------------------------------------+
 #ifndef UI_PANEL_MQH
 #define UI_PANEL_MQH
@@ -8,7 +9,8 @@
 #include <DataStructures.mqh>
 
 // =========================================================================
-// СВЯЗЬ С ГЛОБАЛЬНЫМИ ПЕРЕМЕННЫМИ ФИЛЬТРОВ ИЗ ГЛАВНОГО ФАЙЛА
+// ССЫЛКИ НА ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ИЗ ГЛАВНОГО ФАЙЛА / SignalManager.mqh
+// (Это устраняет ошибки "undeclared identifier" во всех вкладках)
 // =========================================================================
 extern bool filterNews;
 extern bool filterVolatility;
@@ -16,12 +18,33 @@ extern bool filterSession;
 extern bool filterCandle;
 extern bool filterRSI;
 extern bool filterStructure;
+
+//extern SignalRecord history[];       // <-- ЭТОГО НЕ ХВАТАЛО (решает 100 ошибок)
+extern int totalSignals;
+extern int winningSignals;
+extern int losingSignals;
+extern int canceledSignals;
+extern datetime statsStartDate;
+extern int symbolDigits;
+
+extern double recEntry;
+extern double recSL;
+extern double recTP;
+extern string recOrderType;
+extern string activeMode;
+extern double nearestResistance;
+extern double nearestSupport;
+extern bool isBacktestRunning;
 // =========================================================================
 
-// Глобальные переменные состояния UI
+//--- Состояние UI
 int currentTab = 0;
 bool isCollapsed = false;
-IndicatorVotes g_resultH1, g_resultH4, g_resultD1;
+
+//--- Данные для отрисовки (заполняются главным файлом)
+IndicatorVotes g_resultH1;
+IndicatorVotes g_resultH4;
+IndicatorVotes g_resultD1;
 string g_currentSymbol;
 double g_symbolPoint;
 
