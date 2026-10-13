@@ -7,20 +7,11 @@
 //=== ПОДКЛЮЧЕНИЕ МОДУЛЕЙ ===
 #include <Config.mqh>
 #include <DataStructures.mqh>
+#include <GlobalVars.mqh> 
 #include <Analyzer.mqh>
 #include <SignalManager.mqh>
 #include <Storage.mqh>
 #include <Executor.mqh>
-
-/*//--- Статусы фильтров (должны быть ОБЪЯВЛЕНЫ ДО UI/Panel.mqh!)
-bool filterNews = true;
-bool filterVolatility = true;
-bool filterSession = true;
-bool filterCandle = true;
-bool filterRSI = true;
-bool filterStructure = true;
-*/
-
 #include <Levels.mqh>
 
 #include <UI/Panel.mqh>
@@ -34,11 +25,11 @@ string statsFileName = "";
 string logFileName = "";
 string resultFileName = "";
 datetime logMonthStart = 0;
-datetime statsStartDate = 0;
+//datetime statsStartDate = 0;
 string statsSymbol = "";
 
 //--- Бэктест
-bool isBacktestRunning = false;
+//bool isBacktestRunning = false;
 
 //--- Результаты анализа по ТФ (локальные копии для логики)
 IndicatorVotes resultH1, resultH4, resultD1;
@@ -50,14 +41,6 @@ int hEMA50_H4, hEMA200_H4, hMACD_H4, hADX_H4, hRSI_H4;
 int hStoch_H4, hCCI_H4, hVol_H4, hOBV_H4, hBB_H4, hATR_H4;
 int hEMA50_D1, hEMA200_D1, hMACD_D1, hADX_D1, hRSI_D1;
 int hStoch_D1, hCCI_D1, hVol_D1, hOBV_D1, hBB_D1, hATR_D1;
-
-//--- Информация о паре
-string currentSymbol = "";
-string symbolType = "";
-int symbolDigits = 0;
-double symbolPoint = 0;
-long symbolSpread = 0;
-string currentSession = "";
 
 //--- Настройки
 input bool   UseSoundAlert     = true;
@@ -381,31 +364,73 @@ bool IsGoodSession()
 //+------------------------------------------------------------------+
 void UpdateFilterStates()
 {
-   // Фильтр новостей
+   // Фильтр новостей: true = НЕТ новостей (можно торговать)
    if(FilterNews) {
       filterNews = !IsNewsTime();
    } else {
-      filterNews = true; // Если фильтр выключен — считаем пройденным
+      filterNews = true;
    }
    
-   // Фильтр волатильности
+   // Фильтр волатильности: true = волатильность в норме
    if(FilterVolatility) {
       filterVolatility = IsVolatilityOk();
    } else {
       filterVolatility = true;
    }
    
-   // Фильтр сессии
+   // Фильтр сессии: true = хорошая сессия
    if(FilterSession) {
       filterSession = IsGoodSession();
    } else {
       filterSession = true;
    }
    
-   // Фильтр свечи и RSI проверяются позже в CheckEntryForTF
-   filterCandle = FilterCandle;
-   filterRSI = FilterRSI;
-   filterStructure = FilterStructure;
+   // Фильтр свечи: проверяем реальную свечу H1
+   if(FilterCandle && resultH1.weightedSum != 0) {
+      double openH1[], closeH1[];
+      ArraySetAsSeries(openH1, true); ArraySetAsSeries(closeH1, true);
+      if(CopyOpen(_Symbol, PERIOD_H1, 0, 2, openH1) >= 2 && CopyClose(_Symbol, PERIOD_H1, 0, 2, closeH1) >= 2) {
+         if(resultH1.weightedSum > 0) filterCandle = (closeH1[1] > openH1[1]);  // BUY: свеча бычья
+         else if(resultH1.weightedSum < 0) filterCandle = (closeH1[1] < openH1[1]);  // SELL: свеча медвежья
+         else filterCandle = true;
+      } else {
+         filterCandle = true;
+      }
+   } else {
+      filterCandle = true;  // Фильтр выключен или нет сигнала
+   }
+   
+   // Фильтр RSI: проверяем реальный RSI H1
+   if(FilterRSI && resultH1.weightedSum != 0) {
+      double rsiH1[];
+      ArraySetAsSeries(rsiH1, true);
+      if(CopyBuffer(hRSI_H1, 0, 0, 2, rsiH1) >= 2) {
+         if(resultH1.weightedSum > 0) filterRSI = (rsiH1[1] < RSI_FILTER_BUY_MAX);  // BUY: RSI не перекуплен
+         else if(resultH1.weightedSum < 0) filterRSI = (rsiH1[1] > RSI_FILTER_SELL_MIN);  // SELL: RSI не перепродан
+         else filterRSI = true;
+      } else {
+         filterRSI = true;
+      }
+   } else {
+      filterRSI = true;
+   }
+   
+   // Фильтр структуры: проверяем расстояние до уровней
+   if(FilterStructure && nearestResistance > 0 && nearestSupport > 0 && resultH1.weightedSum != 0) {
+      double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double roomUp = nearestResistance - currentPrice;
+      double roomDown = currentPrice - nearestSupport;
+      
+      if(resultH1.weightedSum > 0) {
+         filterStructure = (roomUp >= resultH1.atrValue * STRUCTURE_ROOM_ATR);  // BUY: есть место до сопротивления
+      } else if(resultH1.weightedSum < 0) {
+         filterStructure = (roomDown >= resultH1.atrValue * STRUCTURE_ROOM_ATR);  // SELL: есть место до поддержки
+      } else {
+         filterStructure = true;
+      }
+   } else {
+      filterStructure = true;
+   }
 }
 
 void FindStructureLevels()
@@ -699,27 +724,7 @@ void Analyze()
    
  CalculateRecommendedLevels();
    
-   //=== ОБНОВЛЕНИЕ ФИЛЬТРОВ СВЕЧИ/RSI/СТРУКТУРЫ ПОСЛЕ АНАЛИЗА ===
-   if(UseSignalH1 && resultH1.weightedSum != 0) {
-      // Проверяем свечу H1
-      double openH1[], closeH1[], rsiH1[];
-      ArraySetAsSeries(openH1, true); ArraySetAsSeries(closeH1, true); ArraySetAsSeries(rsiH1, true);
-      if(CopyOpen(_Symbol, PERIOD_H1, 0, 2, openH1) >= 2 && CopyClose(_Symbol, PERIOD_H1, 0, 2, closeH1) >= 2) {
-         if(resultH1.weightedSum > 0) filterCandle = (closeH1[1] > openH1[1]);
-         else if(resultH1.weightedSum < 0) filterCandle = (closeH1[1] < openH1[1]);
-      }
-      if(CopyBuffer(hRSI_H1, 0, 0, 2, rsiH1) >= 2) {
-         if(resultH1.weightedSum > 0) filterRSI = (rsiH1[1] < RSI_FILTER_BUY_MAX);
-         else if(resultH1.weightedSum < 0) filterRSI = (rsiH1[1] > RSI_FILTER_SELL_MIN);
-      }
-      filterStructure = (nearestResistance > 0 && nearestSupport > 0 &&
-                        (MathAbs(resultH1.weightedSum) > 0 ? 
-                         ((resultH1.weightedSum > 0) ? 
-                          (nearestResistance - g_resultH1.currentPrice) >= resultH1.atrValue * STRUCTURE_ROOM_ATR :
-                          (g_resultH1.currentPrice - nearestSupport) >= resultH1.atrValue * STRUCTURE_ROOM_ATR) 
-                         : true));
-   }
-   
+  
    //=== СИНХРОНИЗАЦИЯ ДАННЫХ С UI МОДУЛЕМ (ОБЯЗАТЕЛЬНО) ===
    g_resultH1 = resultH1;
    g_resultH4 = resultH4;
