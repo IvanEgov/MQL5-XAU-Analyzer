@@ -1,16 +1,15 @@
 //+------------------------------------------------------------------+
 //| Analyzer.mqh                                                     |
-//| СЛОЙ 3: ГИБРИДНАЯ ЛОГИКА (10 индикаторов + отскок от уровней)    |
+//| СЛОЙ 3: ЯДРО АНАЛИЗА (10 индикаторов + конфлюэнс + ADX фильтр)   |
 //+------------------------------------------------------------------+
 #ifndef ANALYZER_MQH
 #define ANALYZER_MQH
 
 #include <Config.mqh>
 #include <DataStructures.mqh>
-#include <Levels.mqh>
 
 //+------------------------------------------------------------------+
-//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА (ИНДИКАТОРЫ + УРОВНИ)                     |
+//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА ТАЙМФРЕЙМА (РАБОЧАЯ ВЕРСИЯ)               |
 //+------------------------------------------------------------------+
 IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
                              int hEMA50, int hEMA200, int hMACD, int hADX, int hRSI,
@@ -60,7 +59,7 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    if(CopyBuffer(hBB, 2, shift, 3, bbLow) < 3) return result;
    if(CopyBuffer(hATR, 0, shift, 3, atr) < 3) return result;
 
-   //=== 3. РАСЧЁТ ГОЛОСОВ (10 ИНДИКАТОРОВ) ===
+   //=== 3. РАСЧЁТ ГОЛОСОВ (ПРОФЕССИОНАЛЬНАЯ ЛОГИКА) ===
    int votes[10];
    int bullVotes = 0, bearVotes = 0;
 
@@ -132,64 +131,14 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    result.totalSum = (int)weightedSum;
    for(int i = 0; i < 10; i++) result.votes[i] = votes[i];
 
-   //=== 6. ФИЛЬТР ПО УРОВНЯМ (ОТСКОК) ===
-   double currentPrice = close[1];
-   double zoneATR = 0.3; // Зона отскока
-   
-   bool nearSupport = Levels_IsNearLevel(currentPrice, "SUPPORT", zoneATR);
-   bool nearResistance = Levels_IsNearLevel(currentPrice, "RESISTANCE", zoneATR);
-   
-   // Подтверждение отскока
-   bool bullishCandle = (close[1] > open[1]);
-   bool bearishCandle = (close[1] < open[1]);
-   bool rsiOversold = (rsi[1] < 40.0);
-   bool rsiOverbought = (rsi[1] > 60.0);
-   bool stochReversalUp = (stochK[1] < 30.0 && stochK[1] > stochD[1]);
-   bool stochReversalDown = (stochK[1] > 70.0 && stochK[1] < stochD[1]);
+   //=== 6. ОПРЕДЕЛЕНИЕ СИГНАЛА ===
+   if(weightedSum >= params.signalThreshold) result.signal = "STRONG BUY";
+   else if(weightedSum >= SIGNAL_WEAK_THRESHOLD) result.signal = "BUY";
+   else if(weightedSum <= -params.signalThreshold) result.signal = "STRONG SELL";
+   else if(weightedSum <= -SIGNAL_WEAK_THRESHOLD) result.signal = "SELL";
+   else result.signal = "HOLD";
 
-   //=== 7. ОПРЕДЕЛЕНИЕ СИГНАЛА С УЧЁТОМ УРОВНЕЙ ===
-   
-   // BUY: индикаторы за BUY + цена у поддержки + подтверждение отскока
-   bool buySignal = (weightedSum >= params.signalThreshold) && 
-                    nearSupport && 
-                    bullishCandle && 
-                    (rsiOversold || stochReversalUp);
-   
-   // SELL: индикаторы за SELL + цена у сопротивления + подтверждение отскока
-   bool sellSignal = (weightedSum <= -params.signalThreshold) && 
-                     nearResistance && 
-                     bearishCandle && 
-                     (rsiOverbought || stochReversalDown);
-   
-   if(buySignal) {
-      result.signal = (weightedSum >= params.signalThreshold * 1.5) ? "STRONG BUY" : "BUY";
-      
-      // TP = к следующему уровню сопротивления
-      int resIdx = Levels_FindNearest(currentPrice, "RESISTANCE", 3.0);
-      if(resIdx >= 0) {
-         result.targetPrice = g_levels[resIdx].price;
-      } else {
-         result.targetPrice = currentPrice + (atr[1] * 2.0);
-      }
-   }
-   else if(sellSignal) {
-      result.signal = (weightedSum <= -params.signalThreshold * 1.5) ? "STRONG SELL" : "SELL";
-      
-      // TP = к следующему уровню поддержки
-      int supIdx = Levels_FindNearest(currentPrice, "SUPPORT", 3.0);
-      if(supIdx >= 0) {
-         result.targetPrice = g_levels[supIdx].price;
-      } else {
-         result.targetPrice = currentPrice - (atr[1] * 2.0);
-      }
-   }
-   else {
-      result.signal = "HOLD";
-      result.weightedSum = 0;
-      result.targetPrice = currentPrice;
-   }
-
-   //=== 8. РАСЧЁТ ATR И ПРОГНОЗА ===
+   //=== 7. РАСЧЁТ ATR И ПРОГНОЗА ===
    result.atrValue = atr[1];
    result.currentPrice = close[1];
    
@@ -204,6 +153,20 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    int minC = (tf == PERIOD_H1) ? MIN_CANDLES_H1 : (tf == PERIOD_H4) ? MIN_CANDLES_H4 : MIN_CANDLES_D1;
    int maxC = (tf == PERIOD_H1) ? MAX_CANDLES_H1 : (tf == PERIOD_H4) ? MAX_CANDLES_H4 : MAX_CANDLES_D1;
    result.candlesForecast = MathMax(minC, MathMin(maxC, baseCandles));
+
+   //=== 8. РАСЧЁТ ЦЕЛЕВОЙ ЦЕНЫ ===
+   double multiplier = 0;
+   if(tf == PERIOD_H1) multiplier = TP_MULT_H1_BASE + (result.candlesForecast * TP_MULT_H1_STEP);
+   else if(tf == PERIOD_H4) multiplier = TP_MULT_H4_BASE + (result.candlesForecast * TP_MULT_H4_STEP);
+   else if(tf == PERIOD_D1) multiplier = TP_MULT_D1_BASE + (result.candlesForecast * TP_MULT_D1_STEP);
+   else multiplier = 1.5;
+
+   if(weightedSum > 0)
+      result.targetPrice = result.currentPrice + (result.atrValue * multiplier);
+   else if(weightedSum < 0)
+      result.targetPrice = result.currentPrice - (result.atrValue * multiplier);
+   else
+      result.targetPrice = result.currentPrice;
 
    return result;
 }

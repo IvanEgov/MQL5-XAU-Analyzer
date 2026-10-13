@@ -1,13 +1,12 @@
 //+------------------------------------------------------------------+
 //| Backtester.mqh                                                   |
-//| СЛОЙ 8: БЭКТЕСТ ДЛЯ ГИБРИДНОЙ СТРАТЕГИИ                          |
+//| СЛОЙ 8: БЭКТЕСТ (РАБОЧАЯ ВЕРСИЯ - без уровней)                   |
 //+------------------------------------------------------------------+
 #ifndef BACKTESTER_MQH
 #define BACKTESTER_MQH
 
 #include <Config.mqh>
 #include <DataStructures.mqh>
-#include <Levels.mqh>
 
 extern IndicatorParams optParams;
 extern int hEMA50_H1, hEMA200_H1, hMACD_H1, hADX_H1, hRSI_H1;
@@ -21,14 +20,11 @@ extern string currentSymbol;
 extern int symbolDigits;
 
 //+------------------------------------------------------------------+
-//| БЭКТЕСТ ДЛЯ ГИБРИДНОЙ СТРАТЕГИИ                                  |
+//| БЭКТЕСТ (РАБОЧАЯ ВЕРСИЯ)                                         |
 //+------------------------------------------------------------------+
 void RunBacktest()
 {
-   Print("🚀 ЗАПУСК ГИБРИДНОГО БЭКТЕСТА (индикаторы + отскок от уровней)");
-   
-   // Инициализируем уровни
-   Levels_Init();
+   Print("🚀 ЗАПУСК БЭКТЕСТА (рабочая версия)");
    
    int availableBars = iBars(_Symbol, PERIOD_H1);
    if(availableBars < 500) { Print("❌ Мало истории"); isBacktestRunning = false; return; }
@@ -40,10 +36,10 @@ void RunBacktest()
    double testThresholds[];
    int tCount = BuildGridDouble(2.0, 5.0, 0.5, testThresholds);
    
-   double testSLMult[];
-   int sCount = BuildGridDouble(0.8, 1.5, 0.2, testSLMult);
+   double testATRMultipliers[];
+   int aCount = BuildGridDouble(1.0, 2.5, 0.5, testATRMultipliers);
 
-   int totalCombinations = tCount * sCount;
+   int totalCombinations = tCount * aCount;
    Print("🔄 Оптимизация: ", totalCombinations, " комбинаций...");
 
    double bestFitness = -999.0;
@@ -56,14 +52,14 @@ void RunBacktest()
    int comboCount = 0;
 
    for(int t = 0; t < tCount; t++)
-   for(int s = 0; s < sCount; s++)
+   for(int a = 0; a < aCount; a++)
    {
       comboCount++;
-      if(comboCount % 3 == 0) Print("⏳ Комбинация ", comboCount, " / ", totalCombinations);
+      if(comboCount % 5 == 0) Print("⏳ Комбинация ", comboCount, " / ", totalCombinations);
       
       IndicatorParams testParams = optParams;
       testParams.signalThreshold = testThresholds[t];
-      testParams.atrSLMult = testSLMult[s];
+      testParams.atrSLMult = testATRMultipliers[a];
       
       int trades = 0, wins = 0, losses = 0;
       int lastTradeBar = -1;
@@ -72,7 +68,7 @@ void RunBacktest()
       for(int shift = actualBars; shift >= 10; shift--)
       {
          if(shift % BacktestStepBars != 0) continue;
-         if(lastTradeBar > 0 && shift >= lastTradeBar - 4) continue;
+         if(lastTradeBar > 0 && shift >= lastTradeBar - 3) continue;
          
          IndicatorVotes sig = AnalyzeSignal(PERIOD_H1, shift, hEMA50_H1, hEMA200_H1, hMACD_H1, hADX_H1, hRSI_H1,
                                             hStoch_H1, hCCI_H1, hVol_H1, hOBV_H1, hBB_H1, hATR_H1, testParams);
@@ -90,11 +86,7 @@ void RunBacktest()
          
          string dir = (sig.weightedSum > 0) ? "BUY" : "SELL";
          double sl = (dir == "BUY") ? entry - (atr[0] * testParams.atrSLMult) : entry + (atr[0] * testParams.atrSLMult);
-         double tp = sig.targetPrice; // TP из Analyzer (к следующему уровню)
-         
-         double slDist = MathAbs(entry - sl);
-         double tpDist = MathAbs(tp - entry);
-         if(slDist <= 0 || tpDist / slDist < 1.0) continue;
+         double tp = (dir == "BUY") ? entry + (atr[0] * testParams.atrSLMult * 1.5) : entry - (atr[0] * testParams.atrSLMult * 1.5);
          
          bool win = false, hit = false;
          for(int i = 2; i <= 48 && (shift - i) >= 0; i++) {
@@ -124,7 +116,7 @@ void RunBacktest()
       
       for(int shift = actualBars_H4; shift >= 5; shift--)
       {
-         if(lastTradeBar_H4 > 0 && shift >= lastTradeBar_H4 - 2) continue;
+         if(lastTradeBar_H4 > 0 && shift >= lastTradeBar_H4 - 1) continue;
          
          IndicatorVotes sig = AnalyzeSignal(PERIOD_H4, shift, hEMA50_H4, hEMA200_H4, hMACD_H4, hADX_H4, hRSI_H4,
                                             hStoch_H4, hCCI_H4, hVol_H4, hOBV_H4, hBB_H4, hATR_H4, testParams);
@@ -142,11 +134,7 @@ void RunBacktest()
          
          string dir = (sig.weightedSum > 0) ? "BUY" : "SELL";
          double sl = (dir == "BUY") ? entry - (atr[0] * testParams.atrSLMult) : entry + (atr[0] * testParams.atrSLMult);
-         double tp = sig.targetPrice;
-         
-         double slDist = MathAbs(entry - sl);
-         double tpDist = MathAbs(tp - entry);
-         if(slDist <= 0 || tpDist / slDist < 1.0) continue;
+         double tp = (dir == "BUY") ? entry + (atr[0] * testParams.atrSLMult * 1.5) : entry - (atr[0] * testParams.atrSLMult * 1.5);
          
          bool win = false, hit = false;
          for(int i = 2; i <= 60 && (shift - i) >= 0; i++) {
@@ -177,13 +165,13 @@ void RunBacktest()
          
          double fitness = acc;
          
-         if(acc >= 70.0) fitness += 30.0;
-         else if(acc >= 60.0) fitness += 20.0;
-         else if(acc >= 50.0) fitness += 10.0;
+         if(acc >= 60.0) fitness += 25.0;
+         else if(acc >= 55.0) fitness += 15.0;
+         else if(acc >= 50.0) fitness += 5.0;
          
-         if(signalsPerDay >= 1.0 && signalsPerDay <= 5.0) fitness += 25.0;
-         else if(signalsPerDay >= 0.5 && signalsPerDay < 1.0) fitness += 15.0;
-         else if(signalsPerDay > 5.0) fitness -= 10.0;
+         if(signalsPerDay >= 1.0 && signalsPerDay <= 10.0) fitness += 20.0;
+         else if(signalsPerDay >= 0.5 && signalsPerDay < 1.0) fitness += 10.0;
+         else if(signalsPerDay > 10.0) fitness -= 10.0;
          
          if(fitness > bestFitness) {
             bestFitness = fitness;

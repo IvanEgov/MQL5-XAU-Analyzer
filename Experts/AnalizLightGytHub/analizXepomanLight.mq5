@@ -11,7 +11,7 @@
 #include <SignalManager.mqh>
 #include <Storage.mqh>
 #include <Executor.mqh>      // ← СЛОЙ 7: ИСПОЛНИТЕЛЬ
-#include <Levels.mqh>
+//#include <Levels.mqh>
 
 #include <UI/Panel.mqh>
 
@@ -231,8 +231,8 @@ int OnInit()
    
    EventSetTimer(60);
       //=== ПОИСК УРОВНЕЙ ===
-   Levels_Init();
-   Levels_DrawOnChart();
+  // Levels_Init();
+  // Levels_DrawOnChart();
    
    //=== ЗАГРУЗКА ДАННЫХ ИЗ ФАЙЛОВ ===
    Storage_LoadStats();
@@ -626,8 +626,8 @@ void Analyze()
    
    // Обновляем уровни и отрисовываем
    if(newBarH1) {
-      Levels_Init();
-      Levels_DrawOnChart();
+      //Levels_Init();
+      //Levels_DrawOnChart();
    }
    
    
