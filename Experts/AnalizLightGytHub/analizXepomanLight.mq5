@@ -10,7 +10,17 @@
 #include <Analyzer.mqh>
 #include <SignalManager.mqh>
 #include <Storage.mqh>
-#include <Executor.mqh>      // ← СЛОЙ 7: ИСПОЛНИТЕЛЬ
+#include <Executor.mqh>
+
+//--- Статусы фильтров (должны быть ОБЪЯВЛЕНЫ ДО UI/Panel.mqh!)
+bool filterNews = true;
+bool filterVolatility = true;
+bool filterSession = true;
+bool filterCandle = true;
+bool filterRSI = true;
+bool filterStructure = true;
+
+#include <UI/Panel.mqh>
 #include <Levels.mqh>
 
 #include <UI/Panel.mqh>
@@ -365,6 +375,38 @@ bool IsGoodSession()
    return true;
 }
 
+//+------------------------------------------------------------------+
+//| ОБНОВЛЕНИЕ СОСТОЯНИЙ ФИЛЬТРОВ (вызывается на каждом тике)        |
+//+------------------------------------------------------------------+
+void UpdateFilterStates()
+{
+   // Фильтр новостей
+   if(FilterNews) {
+      filterNews = !IsNewsTime();
+   } else {
+      filterNews = true; // Если фильтр выключен — считаем пройденным
+   }
+   
+   // Фильтр волатильности
+   if(FilterVolatility) {
+      filterVolatility = IsVolatilityOk();
+   } else {
+      filterVolatility = true;
+   }
+   
+   // Фильтр сессии
+   if(FilterSession) {
+      filterSession = IsGoodSession();
+   } else {
+      filterSession = true;
+   }
+   
+   // Фильтр свечи и RSI проверяются позже в CheckEntryForTF
+   filterCandle = FilterCandle;
+   filterRSI = FilterRSI;
+   filterStructure = FilterStructure;
+}
+
 void FindStructureLevels()
 {
    nearestResistance = 0;
@@ -603,6 +645,9 @@ void Analyze()
    currentSession = DetectSession();
    symbolSpread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
    
+    //=== ОБНОВЛЕНИЕ СОСТОЯНИЙ ФИЛЬТРОВ (для вкладки UI) ===
+   UpdateFilterStates();
+   
    //=== ПРОВЕРКА НОВЫХ СВЕЧЕЙ ===
    datetime currentBarTimeH1 = iTime(_Symbol, PERIOD_H1, 0);
    datetime currentBarTimeH4 = iTime(_Symbol, PERIOD_H4, 0);
@@ -652,6 +697,27 @@ void Analyze()
    }
    
  CalculateRecommendedLevels();
+   
+   //=== ОБНОВЛЕНИЕ ФИЛЬТРОВ СВЕЧИ/RSI/СТРУКТУРЫ ПОСЛЕ АНАЛИЗА ===
+   if(UseSignalH1 && resultH1.weightedSum != 0) {
+      // Проверяем свечу H1
+      double openH1[], closeH1[], rsiH1[];
+      ArraySetAsSeries(openH1, true); ArraySetAsSeries(closeH1, true); ArraySetAsSeries(rsiH1, true);
+      if(CopyOpen(_Symbol, PERIOD_H1, 0, 2, openH1) >= 2 && CopyClose(_Symbol, PERIOD_H1, 0, 2, closeH1) >= 2) {
+         if(resultH1.weightedSum > 0) filterCandle = (closeH1[1] > openH1[1]);
+         else if(resultH1.weightedSum < 0) filterCandle = (closeH1[1] < openH1[1]);
+      }
+      if(CopyBuffer(hRSI_H1, 0, 0, 2, rsiH1) >= 2) {
+         if(resultH1.weightedSum > 0) filterRSI = (rsiH1[1] < RSI_FILTER_BUY_MAX);
+         else if(resultH1.weightedSum < 0) filterRSI = (rsiH1[1] > RSI_FILTER_SELL_MIN);
+      }
+      filterStructure = (nearestResistance > 0 && nearestSupport > 0 &&
+                        (MathAbs(resultH1.weightedSum) > 0 ? 
+                         ((resultH1.weightedSum > 0) ? 
+                          (nearestResistance - g_resultH1.currentPrice) >= resultH1.atrValue * STRUCTURE_ROOM_ATR :
+                          (g_resultH1.currentPrice - nearestSupport) >= resultH1.atrValue * STRUCTURE_ROOM_ATR) 
+                         : true));
+   }
    
    //=== СИНХРОНИЗАЦИЯ ДАННЫХ С UI МОДУЛЕМ (ОБЯЗАТЕЛЬНО) ===
    g_resultH1 = resultH1;

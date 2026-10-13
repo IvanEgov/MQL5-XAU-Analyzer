@@ -7,6 +7,17 @@
 #include <Config.mqh>
 #include <DataStructures.mqh>
 
+// =========================================================================
+// СВЯЗЬ С ГЛОБАЛЬНЫМИ ПЕРЕМЕННЫМИ ФИЛЬТРОВ ИЗ ГЛАВНОГО ФАЙЛА
+// =========================================================================
+extern bool filterNews;
+extern bool filterVolatility;
+extern bool filterSession;
+extern bool filterCandle;
+extern bool filterRSI;
+extern bool filterStructure;
+// =========================================================================
+
 // Глобальные переменные состояния UI
 int currentTab = 0;
 bool isCollapsed = false;
