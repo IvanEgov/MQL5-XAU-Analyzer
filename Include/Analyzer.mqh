@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| Analyzer.mqh                                                     |
-//| СЛОЙ 3: PULLBACK ENGINE - Вход на отскок от уровней              |
+//| СЛОЙ 3: ГИБРИДНАЯ ЛОГИКА (10 индикаторов + отскок от уровней)    |
 //+------------------------------------------------------------------+
 #ifndef ANALYZER_MQH
 #define ANALYZER_MQH
@@ -10,7 +10,7 @@
 #include <Levels.mqh>
 
 //+------------------------------------------------------------------+
-//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА (PULLBACK MODE)                           |
+//| ЕДИНАЯ ФУНКЦИЯ АНАЛИЗА (ИНДИКАТОРЫ + УРОВНИ)                     |
 //+------------------------------------------------------------------+
 IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
                              int hEMA50, int hEMA200, int hMACD, int hADX, int hRSI,
@@ -30,68 +30,157 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
    if(CopyLow(_Symbol, tf, shift, 3, low) < 3) return result;
 
    //=== 2. ПОЛУЧАЕМ ДАННЫЕ ИНДИКАТОРОВ ===
-   double rsi[], stochK[], stochD[], atr[];
+   double ema50[], ema200[], macdMain[], macdSig[], adx[], plusDI[], minusDI[];
+   double rsi[], stochK[], stochD[], cci[], vol[], obv[], bbMid[], bbUp[], bbLow[], atr[];
+   
+   ArraySetAsSeries(ema50, true); ArraySetAsSeries(ema200, true);
+   ArraySetAsSeries(macdMain, true); ArraySetAsSeries(macdSig, true);
+   ArraySetAsSeries(adx, true); ArraySetAsSeries(plusDI, true); ArraySetAsSeries(minusDI, true);
    ArraySetAsSeries(rsi, true);
    ArraySetAsSeries(stochK, true); ArraySetAsSeries(stochD, true);
+   ArraySetAsSeries(cci, true); ArraySetAsSeries(vol, true); ArraySetAsSeries(obv, true);
+   ArraySetAsSeries(bbMid, true); ArraySetAsSeries(bbUp, true); ArraySetAsSeries(bbLow, true);
    ArraySetAsSeries(atr, true);
 
+   if(CopyBuffer(hEMA50, 0, shift, 3, ema50) < 3) return result;
+   if(CopyBuffer(hEMA200, 0, shift, 3, ema200) < 3) return result;
+   if(CopyBuffer(hMACD, 0, shift, 3, macdMain) < 3) return result;
+   if(CopyBuffer(hMACD, 1, shift, 3, macdSig) < 3) return result;
+   if(CopyBuffer(hADX, 0, shift, 3, adx) < 3) return result;
+   if(CopyBuffer(hADX, 1, shift, 3, plusDI) < 3) return result;
+   if(CopyBuffer(hADX, 2, shift, 3, minusDI) < 3) return result;
    if(CopyBuffer(hRSI, 0, shift, 3, rsi) < 3) return result;
    if(CopyBuffer(hStoch, 0, shift, 3, stochK) < 3) return result;
    if(CopyBuffer(hStoch, 1, shift, 3, stochD) < 3) return result;
+   if(CopyBuffer(hCCI, 0, shift, 3, cci) < 3) return result;
+   if(CopyBuffer(hVol, 0, shift, 3, vol) < 3) return result;
+   if(CopyBuffer(hOBV, 0, shift, 3, obv) < 3) return result;
+   if(CopyBuffer(hBB, 0, shift, 3, bbMid) < 3) return result;
+   if(CopyBuffer(hBB, 1, shift, 3, bbUp) < 3) return result;
+   if(CopyBuffer(hBB, 2, shift, 3, bbLow) < 3) return result;
    if(CopyBuffer(hATR, 0, shift, 3, atr) < 3) return result;
 
-   result.atrValue = atr[1];
-   result.currentPrice = close[1];
+   //=== 3. РАСЧЁТ ГОЛОСОВ (10 ИНДИКАТОРОВ) ===
+   int votes[10];
+   int bullVotes = 0, bearVotes = 0;
 
-   //=== 3. ПРОВЕРКА: ЦЕНА У УРОВНЯ? ===
+   votes[0] = (close[1] > ema50[1]) ? 1 : -1;
+   if(votes[0] > 0) bullVotes++; else bearVotes++;
+
+   votes[1] = (close[1] > ema200[1]) ? 1 : -1;
+   if(votes[1] > 0) bullVotes++; else bearVotes++;
+
+   if(macdMain[1] > macdSig[1]) { votes[2] = 1; bullVotes++; }
+   else { votes[2] = -1; bearVotes++; }
+
+   if(adx[1] > 20.0) {
+      votes[3] = (plusDI[1] > minusDI[1]) ? 1 : -1;
+      if(votes[3] > 0) bullVotes++; else bearVotes++;
+   } else {
+      votes[3] = 0;
+   }
+
+   if(rsi[1] > 55.0) { votes[4] = 1; bullVotes++; }
+   else if(rsi[1] < 45.0) { votes[4] = -1; bearVotes++; }
+   else { votes[4] = 0; }
+
+   if(stochK[1] > 50.0) { votes[5] = 1; bullVotes++; }
+   else if(stochK[1] < 50.0) { votes[5] = -1; bearVotes++; }
+   else { votes[5] = 0; }
+
+   if(cci[1] > 50.0) { votes[6] = 1; bullVotes++; }
+   else if(cci[1] < -50.0) { votes[6] = -1; bearVotes++; }
+   else { votes[6] = 0; }
+
+   if(vol[1] > vol[2] * 1.1) {
+      votes[7] = (close[1] > open[1]) ? 1 : -1;
+      if(votes[7] > 0) bullVotes++; else bearVotes++;
+   } else {
+      votes[7] = 0;
+   }
+
+   votes[8] = (obv[1] > obv[2]) ? 1 : -1;
+   if(votes[8] > 0) bullVotes++; else bearVotes++;
+
+   votes[9] = (close[1] > bbMid[1]) ? 1 : -1;
+   if(votes[9] > 0) bullVotes++; else bearVotes++;
+
+   //=== 4. ПРОВЕРКА КОНФЛЮЭНСА ===
+   if(bullVotes < 3 && bearVotes < 3) {
+      result.signal = "HOLD";
+      result.weightedSum = 0;
+      result.totalSum = 0;
+      for(int i=0; i<10; i++) result.votes[i] = votes[i];
+      result.atrValue = atr[1];
+      result.currentPrice = close[1];
+      result.targetPrice = close[1];
+      result.candlesForecast = 0;
+      return result;
+   }
+
+   //=== 5. ВЗВЕШЕННАЯ СУММА ===
+   double weightedSum = 0;
+   for(int i = 0; i < 10; i++) {
+      weightedSum += votes[i] * IND_WEIGHTS[i];
+   }
+   
+   if(adx[1] < 20.0) {
+      weightedSum *= 0.5;
+   }
+
+   result.weightedSum = weightedSum;
+   result.totalSum = (int)weightedSum;
+   for(int i = 0; i < 10; i++) result.votes[i] = votes[i];
+
+   //=== 6. ФИЛЬТР ПО УРОВНЯМ (ОТСКОК) ===
    double currentPrice = close[1];
-   double zoneATR = 0.3; // Зона отскока = 0.3 ATR
+   double zoneATR = 0.3; // Зона отскока
    
    bool nearSupport = Levels_IsNearLevel(currentPrice, "SUPPORT", zoneATR);
    bool nearResistance = Levels_IsNearLevel(currentPrice, "RESISTANCE", zoneATR);
-
-   //=== 4. ПРОВЕРКА УСЛОВИЙ ОТСКОКА ===
    
-   // BUY: цена у поддержки + подтверждение
-   bool buyCondition1 = nearSupport;                                    // Цена у поддержки
-   bool buyCondition2 = (close[1] > open[1]);                           // Бычья свеча
-   bool buyCondition3 = (rsi[1] < 40.0);                                // RSI перепродан
-   bool buyCondition4 = (stochK[1] < 25.0 && stochK[1] > stochD[1] && stochK[2] <= stochD[2]); // Stoch разворот вверх
-   
-   // SELL: цена у сопротивления + подтверждение
-   bool sellCondition1 = nearResistance;                                // Цена у сопротивления
-   bool sellCondition2 = (close[1] < open[1]);                          // Медвежья свеча
-   bool sellCondition3 = (rsi[1] > 60.0);                               // RSI перекуплен
-   bool sellCondition4 = (stochK[1] > 75.0 && stochK[1] < stochD[1] && stochK[2] >= stochD[2]); // Stoch разворот вниз
+   // Подтверждение отскока
+   bool bullishCandle = (close[1] > open[1]);
+   bool bearishCandle = (close[1] < open[1]);
+   bool rsiOversold = (rsi[1] < 40.0);
+   bool rsiOverbought = (rsi[1] > 60.0);
+   bool stochReversalUp = (stochK[1] < 30.0 && stochK[1] > stochD[1]);
+   bool stochReversalDown = (stochK[1] > 70.0 && stochK[1] < stochD[1]);
 
-   //=== 5. ОПРЕДЕЛЕНИЕ СИГНАЛА ===
-   // Для BUY нужны ВСЕ 4 условия
-   if(buyCondition1 && buyCondition2 && buyCondition3 && buyCondition4) {
-      result.signal = "STRONG BUY";
-      result.weightedSum = 4.0;
+   //=== 7. ОПРЕДЕЛЕНИЕ СИГНАЛА С УЧЁТОМ УРОВНЕЙ ===
+   
+   // BUY: индикаторы за BUY + цена у поддержки + подтверждение отскока
+   bool buySignal = (weightedSum >= params.signalThreshold) && 
+                    nearSupport && 
+                    bullishCandle && 
+                    (rsiOversold || stochReversalUp);
+   
+   // SELL: индикаторы за SELL + цена у сопротивления + подтверждение отскока
+   bool sellSignal = (weightedSum <= -params.signalThreshold) && 
+                     nearResistance && 
+                     bearishCandle && 
+                     (rsiOverbought || stochReversalDown);
+   
+   if(buySignal) {
+      result.signal = (weightedSum >= params.signalThreshold * 1.5) ? "STRONG BUY" : "BUY";
       
-      // Находим ближайший уровень сопротивления для TP
+      // TP = к следующему уровню сопротивления
       int resIdx = Levels_FindNearest(currentPrice, "RESISTANCE", 3.0);
       if(resIdx >= 0) {
          result.targetPrice = g_levels[resIdx].price;
       } else {
-         // Если нет сопротивления, TP = 2× расстояние до SL
-         double slDist = atr[1] * 1.0;
-         result.targetPrice = currentPrice + (slDist * 2.0);
+         result.targetPrice = currentPrice + (atr[1] * 2.0);
       }
    }
-   // Для SELL нужны ВСЕ 4 условия
-   else if(sellCondition1 && sellCondition2 && sellCondition3 && sellCondition4) {
-      result.signal = "STRONG SELL";
-      result.weightedSum = -4.0;
+   else if(sellSignal) {
+      result.signal = (weightedSum <= -params.signalThreshold * 1.5) ? "STRONG SELL" : "SELL";
       
-      // Находим ближайший уровень поддержки для TP
+      // TP = к следующему уровню поддержки
       int supIdx = Levels_FindNearest(currentPrice, "SUPPORT", 3.0);
       if(supIdx >= 0) {
          result.targetPrice = g_levels[supIdx].price;
       } else {
-         double slDist = atr[1] * 1.0;
-         result.targetPrice = currentPrice - (slDist * 2.0);
+         result.targetPrice = currentPrice - (atr[1] * 2.0);
       }
    }
    else {
@@ -100,15 +189,21 @@ IndicatorVotes AnalyzeSignal(ENUM_TIMEFRAMES tf, int shift,
       result.targetPrice = currentPrice;
    }
 
-   // Заполняем votes для UI
-   for(int i = 0; i < 10; i++) {
-      if(result.weightedSum > 0) result.votes[i] = 1;
-      else if(result.weightedSum < 0) result.votes[i] = -1;
-      else result.votes[i] = 0;
-   }
+   //=== 8. РАСЧЁТ ATR И ПРОГНОЗА ===
+   result.atrValue = atr[1];
+   result.currentPrice = close[1];
+   
+   int baseCandlesTF = (tf == PERIOD_H1) ? BASE_CANDLES_H1 : 
+                       (tf == PERIOD_H4) ? BASE_CANDLES_H4 : BASE_CANDLES_D1;
+   
+   double signalStrength = MathAbs(weightedSum);
+   int baseCandles = baseCandlesTF;
+   if(signalStrength >= SIGNAL_STRONG) baseCandles = baseCandlesTF + 1;
+   else if(signalStrength < SIGNAL_WEAK_THRESHOLD) baseCandles = MathMax(1, baseCandlesTF - 1);
 
-   // Прогноз: 3-5 свечей до достижения TP
-   result.candlesForecast = (MathAbs(result.weightedSum) >= 4.0) ? 5 : 3;
+   int minC = (tf == PERIOD_H1) ? MIN_CANDLES_H1 : (tf == PERIOD_H4) ? MIN_CANDLES_H4 : MIN_CANDLES_D1;
+   int maxC = (tf == PERIOD_H1) ? MAX_CANDLES_H1 : (tf == PERIOD_H4) ? MAX_CANDLES_H4 : MAX_CANDLES_D1;
+   result.candlesForecast = MathMax(minC, MathMin(maxC, baseCandles));
 
    return result;
 }
