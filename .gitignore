@@ -29,6 +29,7 @@
 !/Include/Object.mqh
 !/Include/StdLibErr.mqh
 !/Include/VirtualKeys.mqh
+!/Include/Levels.mqh
 !/Include/UI/
 
 # 5. Files — только заглушка, данные генерируются советником
