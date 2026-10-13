@@ -11,6 +11,7 @@
 #include <SignalManager.mqh>
 #include <Storage.mqh>
 #include <Executor.mqh>      // ← СЛОЙ 7: ИСПОЛНИТЕЛЬ
+#include <Levels.mqh>
 
 #include <UI/Panel.mqh>
 
@@ -220,6 +221,9 @@ int OnInit()
    }
    
    EventSetTimer(60);
+      //=== ПОИСК УРОВНЕЙ ===
+   Levels_Init();
+   Levels_DrawOnChart();
    
    //=== ЗАГРУЗКА ДАННЫХ ИЗ ФАЙЛОВ ===
    Storage_LoadStats();
@@ -609,7 +613,14 @@ void Analyze()
    resultD1 = AnalyzeSignal(PERIOD_D1, 0, hEMA50_D1, hEMA200_D1, hMACD_D1, hADX_D1, hRSI_D1,
                             hStoch_D1, hCCI_D1, hVol_D1, hOBV_D1, hBB_D1, hATR_D1, optParams);
    
-   FindStructureLevels();
+     FindStructureLevels();
+   
+   // Обновляем уровни и отрисовываем
+   if(newBarH1) {
+      Levels_Init();
+      Levels_DrawOnChart();
+   }
+   
    
    //=== РАСЧЁТ УРОВНЕЙ ТОЛЬКО ПРИ НОВОЙ СВЕЧЕ ===
    if(newBarH1 && UseSignalH1)
